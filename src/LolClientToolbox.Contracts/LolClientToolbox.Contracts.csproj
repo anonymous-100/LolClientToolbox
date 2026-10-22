@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- 纯净 net9.0：不引用 WinForms，插件才能是普通类库，不挑平台 -->
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>LolClientToolbox.Contracts</AssemblyName>
+    <RootNamespace>LolClientToolbox.Contracts</RootNamespace>
+    <Version>1.0.0.0</Version>
+  </PropertyGroup>
+
+</Project>

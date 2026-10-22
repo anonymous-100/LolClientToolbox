@@ -1,0 +1,1316 @@
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using LolClientToolbox.Contracts;
+
+namespace LolClientToolbox;
+
+internal static class Program
+{
+    [STAThread]
+    private static void Main(string[] args)
+    {
+        // 必须在创建任何窗口之前调用，否则高分屏上会被系统拉伸放大 → 发虚模糊
+        Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+        // 隐藏的自测入口：--selftest <png路径> 启动后把主窗口自渲染成图存盘再退出，
+        // 供自动化冒烟测试用（不依赖屏幕前台，游戏全屏盖住也能截）。
+        string? shotPath = args.Length >= 2 && args[0] == "--selftest" ? args[1] : null;
+        Application.Run(new MainForm(shotPath));
+    }
+}
+
+/// <summary>
+/// 主窗体 = 纯宿主外壳：状态面板、日志、设置窗、插件加载与扇出。
+///
+/// 自 v23 起**不含任何功能逻辑** —— 窗口修复、跳过卡结算、热重载、接收对局
+/// 全部是 plugins/ 目录下的插件（见 PluginHost.cs 与「插件开发手册.md」）。
+/// 宿主的职责只有：连客户端、采状态、画界面、把事件发给插件。
+/// </summary>
+internal sealed class MainForm : Form, IPluginHost
+{
+    private const int TitleBarH = 33;
+
+    private readonly Label _status;
+    private readonly Label _output;
+    private readonly Label _hint;
+    private readonly string? _selftestShot;
+
+    // ---------- 自绘标题栏 ----------
+    private Panel _titleBar = null!;
+    private Rectangle _btnMin = Rectangle.Empty;
+    private Rectangle _btnClose = Rectangle.Empty;
+    private bool _minHover, _closeHover;
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+    private const int WM_NCLBUTTONDOWN = 0xA1;
+    private const int HTCAPTION = 2;
+
+    private readonly Label _stConn;
+    private readonly Label _stConnDot;
+    private bool _clientUp;
+    private string _subText = "";
+    private readonly Label _stPhaseBig;
+    private readonly Label _stMinor;
+    private readonly DateTime _appStart = DateTime.Now;   // 用于「已运行」累计时长
+    private readonly Label _stDiag;
+    private readonly Panel _statusPanel;
+    private readonly LogList _log;
+    private readonly ToolTip _tip = new();
+    private LcuWatcher? _watcher;
+
+    private readonly Settings _settings;
+    private readonly LcuClient _lcu = new();
+    private readonly PluginManager _plugins;
+
+    private CancellationTokenSource _cts = new();
+    private readonly string _logPath;
+
+    // —— 结构化日志用：只记「变化的部分」，并顺带算出上一阶段停留了多久 ——
+    private DateTime _phaseEnteredAt = DateTime.MinValue;
+    private string _prevClient = "";
+    private string _prevEog = "";
+    private string _prevWindow = "";
+    private string _prevErr = "";
+    private string _lastPhase = "";
+    private ClientSnapshot? _lastCs;
+
+    private static readonly string AppDirectory =
+        Path.GetDirectoryName(Environment.ProcessPath ?? Application.ExecutablePath) ?? AppContext.BaseDirectory;
+
+    // 颜色统一取自 Theme（T），不在界面代码里临时调色
+    private static readonly Color Bg = T.BgBase;
+    private static readonly Color PanelBg = T.BgRaised;
+    private static readonly Color TextMain = T.TxPrimary;
+    private static readonly Color TextDim = T.TxTertiary;
+
+    public MainForm(string? selftestShot = null)
+    {
+        _selftestShot = selftestShot;
+        _logPath = Path.Combine(AppDirectory, "采样日志.txt");
+        _settings = Settings.Load(AppDirectory);
+        _lcu.ClientPathHint = _settings.ClientPathHint;
+        _lcu.Cfg = _settings;
+        _plugins = new PluginManager(this, (lvl, msg, note) => Log(MapKind(lvl), msg, note));
+
+        Text = "LOL 客户端工具箱";
+        // 自测模式把窗口画到屏幕外：截图依然真实（窗口已实际创建并布局），
+        // 但用户看不到 —— 不会像之前那样反复弹窗打扰人
+        if (selftestShot is not null)
+        {
+            StartPosition = FormStartPosition.Manual;
+            Location = new Point(-3000, -3000);
+            ShowInTaskbar = false;
+        }
+        else
+        {
+            StartPosition = FormStartPosition.CenterScreen;
+        }
+        // 标题栏自己画：系统标题栏在部分 Win10/Win11 上无法强制暗色
+        // （DWM 属性 20 时灵时不灵），而它是整个窗口里最亮的一块，和暗色界面冲突。
+        // 自绘之后颜色完全可控，预览和实际也才真正对得上。
+        FormBorderStyle = FormBorderStyle.None;
+        MaximizeBox = false;
+        MinimizeBox = true;
+        ClientSize = new Size(600, 720 + TitleBarH);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        BackColor = Bg;
+        Font = T.Body();
+        DoubleBuffered = true;
+        Icon = SystemIcons.Application;
+
+        // ---------- 客户端状态面板 ----------
+        // 三层：① 连接状态 ② 当前阶段（大字号）③ 次要信息。
+        // 诊断是排障用的，默认收起，出问题才展开。
+        // 高度固定 132：诊断行常驻占位（没内容就是空行），不再出现 132↔150 的抖动
+        _statusPanel = new Panel
+        {
+            Dock = DockStyle.Top, Height = 132, BackColor = PanelBg,
+            Padding = new Padding(T.PadOuter, 12, T.PadOuter, 12),
+        };
+
+        // 第一行：左边是连接状态，右边是设置。同行放，不再单独给它一整行。
+        var connRow = new Panel { Dock = DockStyle.Top, Height = 30, BackColor = PanelBg };
+        _stConn = new Label
+        {
+            Text = "客户端 检测中…", AutoSize = true, Dock = DockStyle.Left,
+            ForeColor = T.TxTertiary, Font = T.Meta(),
+            Padding = new Padding(4, 6, 0, 0),
+        };
+        _stConnDot = new Label
+        {
+            Text = "●", AutoSize = true, Dock = DockStyle.Left,
+            ForeColor = T.TxDisabled, Font = T.Meta(),
+            Padding = new Padding(0, 6, 0, 0),
+        };
+        // Dock 从集合末尾往回停靠：最右边的要先 Add 才会落在最左边，
+        // 而最右边的设置按钮反而要最后 Add（最先贴住右缘）。
+        var btnSettings = MakeGhostButton("设置", 72, 28);
+        btnSettings.Click += (_, _) => OpenSettings();
+        connRow.Controls.Add(_stConn);
+        connRow.Controls.Add(_stConnDot);
+        connRow.Controls.Add(btnSettings);
+
+        _stPhaseBig = new Label
+        {
+            Text = "—", AutoSize = false, Dock = DockStyle.Top, Height = 36,
+            ForeColor = TextMain, BackColor = PanelBg,
+            Font = T.Display(),
+        };
+        // 原始英文阶段名不再单独占一行（它和中文重复），改成鼠标悬停时看
+        _tip.SetToolTip(_stPhaseBig, "把鼠标停在这里可以看到接口返回的原始阶段名");
+
+        _stMinor = new Label
+        {
+            Text = "窗口 — ｜ 已运行 —",
+            AutoSize = false, Dock = DockStyle.Top, Height = 18,
+            ForeColor = T.TxTertiary, BackColor = PanelBg,
+            Font = T.Meta(),
+        };
+        _stDiag = new Label
+        {
+            Text = "", AutoSize = false, Dock = DockStyle.Top, Height = 18,
+            ForeColor = T.TxTertiary, BackColor = PanelBg,
+            Font = T.Meta(),
+        };
+
+        _statusPanel.Controls.Add(_stDiag);
+        _statusPanel.Controls.Add(_stMinor);
+        _statusPanel.Controls.Add(_stPhaseBig);
+        _statusPanel.Controls.Add(connRow);
+
+        // ---------- 运行日志：固定 4 行 ----------
+        // 只在「有东西变了」时记一行，并标出上一阶段停留多久。
+        // 以前是 Dock.Fill 吃剩余高度；卡片区改成「固定高 + 滑动」之后高低归滚动条管，
+        // 日志固定 4 行（标题行 26 + 4×26 = 130）—— 永远看得见最近几条，也不跟卡片区抢高度。
+        var logPanel = new Panel
+        {
+            Dock = DockStyle.Bottom, Height = 26 + T.LogRowH * 4,
+            BackColor = Bg, Padding = new Padding(T.PadOuter, 0, T.PadOuter, 0),
+        };
+        var logHead = new Panel { Dock = DockStyle.Top, Height = 26, BackColor = Bg };
+        var logTitle = new Label
+        {
+            Text = "运行日志 · 仅记录变化", AutoSize = true, Dock = DockStyle.Left,
+            ForeColor = T.TxTertiary, Font = T.Section(), Padding = new Padding(0, 3, 0, 0),
+        };
+        var logNote = new Label
+        {
+            Text = "右列＝上一阶段停留时长", AutoSize = true, Dock = DockStyle.Right,
+            ForeColor = T.TxTertiary, Font = T.Meta(), Padding = new Padding(0, 3, 0, 0),
+        };
+        logHead.Controls.Add(logNote);
+        logHead.Controls.Add(logTitle);
+        _log = new LogList { Dock = DockStyle.Fill };
+        logPanel.Controls.Add(_log);
+        logPanel.Controls.Add(logHead);
+
+        // ---------- 卡片区：固定高度，超出滑动 ----------
+        // 卡片不再由宿主硬编码，而是各插件在 Init 里 RegisterCard 注册，
+        // 顺序由插件清单 plugin.json 的 order 决定（部署方改 json 就能调序）。
+        // 高度固定 382（标题栏 33 + 状态 132 + 卡片 382 + 日志 130 + 底部 76 = 753 正好铺满），
+        // 插件多到放不下时出现滚动条 —— 加插件不再挤占日志和其他区。
+        const int cardGap = 4;
+        const int cardsHostH = 382;
+        var cardsHost = new Panel
+        {
+            Dock = DockStyle.Top, Height = cardsHostH, AutoScroll = true,
+            BackColor = Bg, Padding = new Padding(T.PadOuter, T.Sp3, T.PadOuter, T.Sp3),
+        };
+
+        // 加载插件（Init 里会 RegisterCard，所以必须晚于 _log 创建）
+        _plugins.LoadAll(Path.Combine(AppDirectory, "plugins"));
+
+        // Dock.Top：最后 Add 的最先停靠（在最上面），所以按 order 倒序加
+        var ordered = _plugins.Cards.OrderByDescending(c => c.Order).ToList();
+        foreach (var a in ordered)
+        {
+            a.Control.Dock = DockStyle.Top;
+            a.Control.Height = T.CardH;
+            a.Control.Margin = new Padding(0, 0, 0, cardGap);
+            cardsHost.Controls.Add(a.Control);
+        }
+
+        // ---------- 底部 ----------
+        var footer = new Panel { Dock = DockStyle.Bottom, Height = 76, BackColor = PanelBg, Padding = new Padding(T.PadOuter, 8, T.PadOuter, 8) };
+
+        _status = new Label
+        {
+            Text = "就绪 · 点卡片立即执行，或打开卡片右侧的开关",
+            AutoSize = false, Dock = DockStyle.Top, Height = 22,
+            ForeColor = TextMain, Font = T.BodyBold(),
+        };
+        // 原来挂在标题下面的使用说明，挪到这里
+        var guide = new Label
+        {
+            Text = "点卡片＝执行一次 ｜ 右侧开关＝交给程序长期盯着",
+            AutoSize = false, Dock = DockStyle.Top, Height = 20,
+            ForeColor = TextDim, Font = T.Meta(),
+        };
+        // 第三行做成左右结构：左边「插件：N 个已加载」，右边「导出日志」
+        var engineRow = new Panel { Dock = DockStyle.Top, Height = 18, BackColor = PanelBg };
+        _output = new Label
+        {
+            Text = $"插件：{_plugins.Plugins.Count} 个已加载",
+            AutoSize = false, Dock = DockStyle.Left, Height = 18,
+            ForeColor = TextDim, Font = T.Meta(),
+        };
+        var btnExport = new Label
+        {
+            Text = "导出日志", AutoSize = true, Dock = DockStyle.Right, Height = 18,
+            ForeColor = T.TxTertiary, Font = T.Meta(),
+            TextAlign = ContentAlignment.MiddleRight, Cursor = Cursors.Hand,
+        };
+        btnExport.Click += (_, _) => ExportLog();
+        btnExport.MouseEnter += (_, _) => btnExport.ForeColor = T.TxPrimary;
+        btnExport.MouseLeave += (_, _) => btnExport.ForeColor = T.TxTertiary;
+        // Fill 的 Label 先 Add 才能拿到剩余宽度，右对齐的按钮后 Add 才贴住右缘
+        engineRow.Controls.Add(_output);
+        engineRow.Controls.Add(btnExport);
+        _hint = new Label
+        {
+            AutoSize = false, Dock = DockStyle.Top, Height = 20, Visible = false,
+            ForeColor = T.TxTertiary, Font = T.Meta(),
+        };
+        footer.Controls.Add(_hint);
+        footer.Controls.Add(engineRow);
+        footer.Controls.Add(guide);
+        footer.Controls.Add(_status);
+
+        // Dock 是从后往前沿 z-order 停靠的，所以 Fill 的日志必须最先 Add 才能拿到剩余空间
+        // 标题栏：一条暗条 + 文字 + 右上角最小化/关闭
+        _titleBar = new Panel { Dock = DockStyle.Top, Height = TitleBarH, BackColor = T.BgBase };
+        _titleBar.Paint += TitleBar_Paint;
+        _titleBar.MouseDown += TitleBar_MouseDown;
+        _titleBar.MouseMove += TitleBar_MouseMove;
+        _titleBar.MouseLeave += (_, _) =>
+        {
+            if (_minHover || _closeHover) { _minHover = _closeHover = false; _titleBar.Invalidate(); }
+        };
+
+        // Dock 从集合末尾往回停靠：标题栏最后 Add 才会贴在最顶上
+        Controls.Add(logPanel);
+        Controls.Add(cardsHost);
+        Controls.Add(_statusPanel);
+        Controls.Add(footer);
+        Controls.Add(_titleBar);
+
+        // 无边框窗口借这一条拿回系统阴影
+        Shown += (_, _) =>
+        {
+            // 标题栏暗色必须等窗口可见之后再设一次：句柄刚创建时设会被丢掉
+            T.DarkTitle(this);
+
+            // 「已运行」每秒刷一次：副行的窗口部分也一起刷，
+            // 否则打开应用后时长卡在 0s 不动（状态指纹不变时不会触发刷新）
+            var up = new System.Windows.Forms.Timer { Interval = 1000 };
+            up.Tick += (_, _) =>
+                _stMinor.Text = $"窗口 {WindowInfo.GetClientWindowRect()} ｜ 已运行 {FmtUptime(DateTime.Now - _appStart)}";
+            up.Start();
+            UpdateHint();
+            ApplyPressStrength();
+
+            // 插件全部就绪后再启动：先 StartAll（订阅/后台任务），再开采样和订阅
+            _plugins.StartAll();
+            if (selftestShot is not null)
+            {
+                // 自测模式：让插件把自动开关摆到「开」，截图才能核对金色那一态
+                foreach (var p in _plugins.Plugins)
+                    if (p.Instance is ISelfTestAware st) st.OnSelfTest();
+            }
+            _ = Task.Run(() => AutoLoop(_cts.Token));
+            StartWatcher();
+
+            if (selftestShot is not null)
+            {
+                // 自测模式：等首帧稳定后自渲染存盘，再自动退出
+                var t = new System.Windows.Forms.Timer { Interval = 800 };
+                t.Tick += (_, _) =>
+                {
+                    t.Stop();
+                    try
+                    {
+                        // 对 Form 调 DrawToBitmap 会连非客户区一起画，所以位图用含边框的整窗尺寸
+                        using var bmp = new Bitmap(Width, Height);
+                        DrawToBitmap(bmp, new Rectangle(Point.Empty, bmp.Size));
+                        bmp.Save(selftestShot, System.Drawing.Imaging.ImageFormat.Png);
+                    }
+                    catch { /* 存不了就算了，别挡退出 */ }
+                    Close();
+                };
+                t.Start();
+            }
+        };
+
+        DpiChanged += (_, _) => UpdateHint();
+        FormClosing += (_, _) =>
+        {
+            _cts.Cancel();
+            _plugins.StopAll();
+            _watcher?.Dispose();
+            _lcu.Dispose();
+        };
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        T.DarkTitle(this);
+    }
+
+    /// <summary>
+    /// 开发/排障用的隐藏入口：Ctrl+Shift+D 导出状态快照。
+    /// 这是给排查问题的人用的，不是给用户的功能，所以界面上不放按钮。
+    /// </summary>
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (keyData == (Keys.Control | Keys.Shift | Keys.D))
+        {
+            _ = ExportSnapshot();
+            return true;
+        }
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+
+    // ================= IPluginHost 实现 =================
+
+    string IPluginHost.AppDirectory => AppDirectory;
+    bool IPluginHost.IsSelfTest => _selftestShot is not null;
+    ClientSnapshot? IPluginHost.LastSnapshot => _lastCs;
+    string IPluginHost.CurrentPhase => _lastPhase;
+    bool IPluginHost.ClientRunning => _clientUp;
+
+    // 注意：显式接口实现里不写默认值（写了也无效，调用方走接口时用契约里的默认值）
+    void IPluginHost.Log(LogLevel level, string message, string note) =>
+        Log(MapKind(level), message, note);
+
+    void IPluginHost.SetStatus(string text, bool warn) =>
+        SafeInvoke(this, () => SetStatus(text, warn));
+
+    ICard? IPluginHost.RegisterCard(string title, string desc, bool showAuto) =>
+        _plugins.RegisterCard(title, desc, showAuto, 100);
+
+    void IPluginHost.OnPhaseChanged(Action<string> handler) => _plugins.AddPhaseHandler(handler);
+    void IPluginHost.OnTick(Action<ClientSnapshot> handler) => _plugins.AddTickHandler(handler);
+    void IPluginHost.Subscribe(string uri, Action<PluginEvent> handler) =>
+        _plugins.AddEventHandler(uri, handler);
+
+    async Task<(int Status, string Body)> IPluginHost.GetAsync(string path)
+    {
+        var r = await _lcu.GetExAsync(path);
+        return (r.Status, r.Body);
+    }
+
+    Task<bool> IPluginHost.PostAsync(string path, string body) =>
+        _lcu.PostAsync(path, body);
+
+    async Task<(bool Ok, int Status, string Body)> IPluginHost.PostExAsync(string path, string body)
+    {
+        var r = await _lcu.PostExAsync(path, body);
+        return (r.Ok, r.Status, r.Body);
+    }
+
+    bool IPluginHost.EnsureClient() => _lcu.IsAttached || _lcu.TryAttach();
+
+    /// <summary>
+    /// 【仅迁移用】读旧版 config.json 文件里的键（直接解析文件，不经过 Settings 类 ——
+    /// v23 起功能参数已迁出全局配置，类里没有这些属性了，但老文件里还有）。
+    /// </summary>
+    T IPluginHost.GetLegacy<T>(string key, T fallback)
+    {
+        try
+        {
+            var path = Path.Combine(AppDirectory, "config.json");
+            if (!File.Exists(path)) return fallback;
+            using var d = JsonDocument.Parse(File.ReadAllText(path));
+            if (d.RootElement.ValueKind == JsonValueKind.Object
+                && d.RootElement.TryGetProperty(key, out var v))
+            {
+                var r = v.Deserialize<T>();
+                if (r is not null) return r;
+            }
+        }
+        catch { /* 读不出来就给 fallback */ }
+        return fallback;
+    }
+
+    private static LogKind MapKind(LogLevel level) => level switch
+    {
+        LogLevel.Phase => LogKind.Phase,
+        LogLevel.Auto => LogKind.Auto,
+        LogLevel.Warn => LogKind.Warn,
+        LogLevel.Error => LogKind.Error,
+        _ => LogKind.Info,
+    };
+
+    // ================= 订阅 =================
+
+    /// <summary>
+    /// 启动 WebSocket 订阅。订阅是「加速器」不是「唯一数据源」——
+    /// 连不上会自动重连，同时 AutoLoop 的慢速轮询始终保留，所以订阅失败不会让程序变瞎。
+    /// </summary>
+    private void StartWatcher()
+    {
+        if (_watcher is not null) return;
+        if (!_settings.UseWebSocket)
+        {
+            _subText = "轮询取数（订阅已关）";
+            UpdateConn();
+            return;
+        }
+
+        _watcher = new LcuWatcher(() => _lcu.IsAttached || _lcu.TryAttach() ? _lcu.Credentials : ("", ""));
+        _watcher.StateChanged += (on, note) => SafeInvoke(this, () =>
+        {
+            _subText = on ? "实时订阅" : note;
+            UpdateConn();
+        });
+        _watcher.EventReceived += ev => OnLcuEvent(ev);
+        _watcher.Start();
+    }
+
+    /// <summary>
+    /// 收到推送：阶段变化宿主自己处理（要记日志），其余全部转给插件。
+    /// 插件按 uri 订阅，只收到自己关心的那几条。
+    /// </summary>
+    private void OnLcuEvent(LcuEvent ev)
+    {
+        if (ev.Uri.Length == 0) return;
+
+        if (ev.Uri.Equals(_settings.PhaseEndpoint, StringComparison.OrdinalIgnoreCase))
+        {
+            var phase = LcuClient.PlainJsonString(ev.DataJson);
+            if (!string.IsNullOrEmpty(phase)) OnPhaseChanged(phase);
+        }
+
+        _plugins.FireEvent(new PluginEvent
+        {
+            Uri = ev.Uri, EventType = ev.EventType, DataJson = ev.DataJson,
+        });
+    }
+
+    /// <summary>
+    /// 阶段变化的唯一入口（订阅和轮询都走这里，所以不会重复记两遍）。
+    /// 顺手算出「上一个阶段停留了多少秒」写进日志 —— 卡没卡，看这个数最直接。
+    /// 处理完再扇出给全部插件。
+    /// </summary>
+    private void OnPhaseChanged(string phase)
+    {
+        if (phase == _lastPhase) return;
+        _lastPhase = phase;
+
+        var text = LcuClient.LocalizePhase(phase);
+        string note = "";
+        if (_phaseEnteredAt != DateTime.MinValue)
+            note = "停留 " + FmtDuration(DateTime.Now - _phaseEnteredAt);
+        _phaseEnteredAt = DateTime.Now;
+
+        SafeInvoke(this, () => _tip.SetToolTip(_stPhaseBig, "原始阶段名：" + phase));
+
+        Log(LogKind.Phase, phase + (text.Length > 0 ? $"（{text}）" : ""), note);
+        _plugins.FirePhase(phase);
+    }
+
+    /// <summary>
+    /// 低调的次要按钮（设置这类偶尔才点的）。
+    /// height 可以压到 24 —— 它现在挤在状态行里，再保持 32 会把那一行撑高，
+    /// 但它的可点_HEIGHT 是连着上下留白一起算的，实际并不难按。
+    /// </summary>
+    private static Button MakeGhostButton(string text, int width, int height = T.ControlH)
+    {
+        var b = new Button
+        {
+            Text = text, Width = width, Height = height, Dock = DockStyle.Right,
+            FlatStyle = FlatStyle.Flat, BackColor = T.BgOverlay,
+            ForeColor = T.TxSecondary,
+            Font = T.Meta(), Cursor = Cursors.Hand,
+        };
+        b.FlatAppearance.BorderColor = T.BdStrong;
+        return b;
+    }
+
+    // ================= 自动化 =================
+
+    private async Task AutoLoop(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await AutoTick(ct);
+            }
+            catch
+            {
+                /* 一轮出错不影响下一轮 */
+            }
+            // 订阅连上之后轮询只作兜底（以及窗口检测，窗口尺寸没有事件可订阅），所以放慢
+            int wait = (_watcher?.Connected == true)
+                ? Math.Max(1000, _settings.SubscribedPollMs)
+                : Math.Max(500, _settings.PollIntervalMs);
+            try
+            {
+                await Task.Delay(wait, ct);
+            }
+            catch
+            {
+                return;
+            }
+        }
+    }
+
+    private async Task AutoTick(CancellationToken ct)
+    {
+        var snap = await _lcu.SampleAsync(ct);
+        UpdateStatusPanel(snap);
+        LogChangedFields(snap);
+
+        if (!snap.ClientRunning)
+        {
+            ResetTrackers();
+            return;
+        }
+
+        // 阶段变化统一走 OnPhaseChanged —— 订阅和轮询共用一个入口，所以不会重复记两遍
+        if (!string.IsNullOrEmpty(snap.Phase)) OnPhaseChanged(snap.Phase);
+
+        // 转发给插件：阶段事件之外，每个 tick 都送一份最新快照
+        var cs = new ClientSnapshot
+        {
+            ClientRunning = snap.ClientRunning,
+            Phase = snap.Phase,
+            PhaseText = snap.PhaseText,
+            EogState = snap.EogState,
+            WindowRect = snap.WindowRect,
+            Diag = snap.Diag,
+            TakenAt = snap.TakenAt,
+        };
+        _lastCs = cs;
+        _plugins.FireTick(cs);
+    }
+
+    private void ResetTrackers()
+    {
+        _lastPhase = "";
+        _phaseEnteredAt = DateTime.MinValue;
+    }
+
+    /// <summary>
+    /// 记一行日志（界面列表 + 磁盘各一份）。
+    /// Note 放补充信息，界面上右对齐显示，最常见的是「上一阶段停留多久」。
+    /// </summary>
+    private void Log(LogKind kind, string text, string note = "")
+    {
+        var entry = new LogEntry { Kind = kind, Text = text, Note = note };
+        SafeInvoke(this, () => _log.Push(entry));
+        try
+        {
+            // 行首带日期：以前只有 HH:mm:ss，跨天之后完全看不出某条样本是哪天的，
+            // 想复盘"哪天卡住过"根本对不上。加日期是零成本，收益是日志可归档。
+            TrimLogFile();
+            File.AppendAllText(_logPath,
+                $"{entry.Time:MM-dd HH:mm:ss}  [{entry.KindLabel}]  {text}"
+                + (string.IsNullOrEmpty(note) ? "" : "   " + note)
+                + Environment.NewLine);
+        }
+        catch { /* 写不进去不影响界面 */ }
+    }
+
+    /// <summary>
+    /// 只把「真正变化了的字段」记进日志。
+    /// 以前是每次都把阶段+结算+窗口整行重写一遍，同一件事被刷成两三条，
+    /// 看的人还得自己比对哪列变了。现在一行一个变化，干净得多。
+    /// </summary>
+    private void LogChangedFields(LcuSnapshot snap)
+    {
+        string client = snap.ClientRunning ? "已连接" : "未运行";
+        if (client != _prevClient)
+        {
+            Log(snap.ClientRunning ? LogKind.Info : LogKind.Error,
+                "客户端 " + client + (snap.ClientRunning ? $"（{_lcu.CredSource}）" : ""));
+            _prevClient = client;
+        }
+
+        string eog = snap.EogState.Length > 0 ? snap.EogState : "-";
+        if (snap.ClientRunning && eog != _prevEog)
+        {
+            Log(LogKind.Info, "战绩 " + eog);
+            _prevEog = eog;
+        }
+
+        if (snap.WindowRect.Length > 0 && snap.WindowRect != _prevWindow)
+        {
+            Log(LogKind.Info, "窗口 " + snap.WindowRect);
+            _prevWindow = snap.WindowRect;
+        }
+
+        string err = snap.Error ?? "";
+        if (err != _prevErr)
+        {
+            if (err.Length > 0) Log(LogKind.Error, err);
+            _prevErr = err;
+        }
+    }
+
+    // ---------- 自绘标题栏 ----------
+
+    private void TitleBar_Paint(object? sender, PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
+        int w = _titleBar.Width, h = _titleBar.Height;
+        float s = DeviceDpi / 96f;
+
+        T.FillRect(g, T.BgBase, new Rectangle(0, 0, w, h));
+        // 底部一条细线，把标题栏和状态区分开
+        using (var pen = new Pen(T.BdSubtle, Math.Max(1f, s)))
+            g.DrawLine(pen, 0, h - 1, w, h - 1);
+
+        using var font = T.Meta();
+        var ts = T.MeasureText("LOL 客户端工具箱", font);
+        T.DrawText(g, "LOL 客户端工具箱", font,
+            new Point((int)(16 * s), (h - ts.Height) / 2), T.TxTertiary);
+
+        // 右上角两个按钮：最小化 / 关闭
+        int bw = (int)(46 * s);
+        _btnMin = new Rectangle(w - bw * 2, 0, bw, h);
+        _btnClose = new Rectangle(w - bw, 0, bw, h);
+        if (_minHover) T.FillRect(g, T.BgOverlay, _btnMin);
+        if (_closeHover) T.FillRect(g, Color.FromArgb(160, 88, 78), _btnClose);
+
+        using var bf = T.Body();
+        T.DrawText(g, "—", bf, CenterIn(_btnMin, T.MeasureText("—", bf)), T.TxSecondary);
+        T.DrawText(g, "✕", bf, CenterIn(_btnClose, T.MeasureText("✕", bf)),
+                   _closeHover ? Color.White : T.TxSecondary);
+    }
+
+    private static Point CenterIn(Rectangle r, Size text) =>
+        new(r.X + (r.Width - text.Width) / 2, r.Y + (r.Height - text.Height) / 2);
+
+    private void TitleBar_MouseMove(object? sender, MouseEventArgs e)
+    {
+        bool mh = _btnMin.Contains(e.Location), ch = _btnClose.Contains(e.Location);
+        if (mh != _minHover || ch != _closeHover)
+        {
+            _minHover = mh; _closeHover = ch;
+            _titleBar.Invalidate();
+        }
+    }
+
+    private void TitleBar_MouseDown(object? sender, MouseEventArgs e)
+    {
+        if (e.Button != MouseButtons.Left) return;
+        if (_btnClose.Contains(e.Location)) Close();
+        else if (_btnMin.Contains(e.Location)) WindowState = FormWindowState.Minimized;
+        else
+        {
+            // 按标题栏空白处＝拖动窗口（伪装成系统标题栏的按下）
+            ReleaseCapture();
+            SendMessage(Handle, WM_NCLBUTTONDOWN, HTCAPTION, 0);
+        }
+    }
+
+    /// <summary>无边框窗口默认没有投影，借 ClassStyle 拿回来。</summary>
+    protected override CreateParams CreateParams
+    {
+        get
+        {
+            const int CS_DROPSHADOW = 0x00020000;
+            var cp = base.CreateParams;
+            cp.ClassStyle |= CS_DROPSHADOW;
+            return cp;
+        }
+    }
+
+    /// <summary>
+    /// 连接行只有一句：状态点 + 「客户端 X · 取数方式」。
+    /// 订阅不是独立指标，它只是取数更快的一条路，掉了会自动退回轮询，
+    /// 所以不单独占一个位置，也不给它单独的状态色。
+    /// </summary>
+    private void UpdateConn()
+    {
+        if (_stConn is null) return;
+        bool ok = _clientUp;
+        _stConn.Text = ok ? "客户端 已连接" : "客户端 未运行";
+        if (ok && _subText.Length > 0) _stConn.Text += " · " + _subText;
+        _stConn.ForeColor = ok ? T.TxSecondary : T.TxTertiary;
+        _stConnDot.ForeColor = ok ? T.Success : T.TxDisabled;
+    }
+
+    private void UpdateStatusPanel(LcuSnapshot snap)
+    {
+        SafeInvoke(this, () =>
+        {
+            _clientUp = snap.ClientRunning;
+            UpdateConn();
+
+            if (!snap.ClientRunning)
+            {
+                _stPhaseBig.Text = "未连接";
+                _tip.SetToolTip(_stPhaseBig, "");
+            }
+            else
+            {
+                var eog = snap.EogState.Length > 0 ? snap.EogState : "";
+                // 大字直接显示接口原文（战绩/会话），本地化阶段名挪到悬停提示里 ——
+                // 两行都显示"房间中"是重复的，大字给信息、小字给出处的分工更清楚
+                _stPhaseBig.Text = eog.Length > 0 ? "战绩 " + eog
+                                 : (snap.PhaseText.Length > 0 ? snap.PhaseText
+                                 : (snap.Phase.Length > 0 ? snap.Phase : "(空)"));
+                _tip.SetToolTip(_stPhaseBig, "原始阶段名：" + snap.Phase);
+            }
+
+            _stMinor.Text = $"窗口 {snap.WindowRect} ｜ 已运行 {FmtDuration(DateTime.Now - _appStart)}";
+
+            // 诊断行常驻占位：没内容就是空行，面板高度不再来回跳
+            var diag = snap.Diag ?? "";
+            bool hasDiag = !string.IsNullOrEmpty(snap.Error) && !string.IsNullOrEmpty(diag);
+            _stDiag.Text = hasDiag ? "⚠ " + diag : "";
+            _stDiag.ForeColor = hasDiag ? T.Warning : T.TxTertiary;
+        });
+    }
+
+    private static string FmtDuration(TimeSpan t)
+    {
+        if (t.TotalSeconds < 1) return "<1s";
+        if (t.TotalMinutes < 1) return $"{t.TotalSeconds:0}s";
+        return $"{(int)t.TotalMinutes}m{t.Seconds:00}s";
+    }
+
+    /// <summary>「已运行」用的一套格式：1h05m / 5m03s / 42s。</summary>
+    private static string FmtUptime(TimeSpan t)
+    {
+        if (t.TotalHours >= 1) return $"{(int)t.TotalHours}h{t.Minutes:00}m";
+        if (t.TotalMinutes >= 1) return $"{t.Minutes}m{t.Seconds:00}s";
+        return $"{t.Seconds}s";
+    }
+
+    // ================= 界面杂项 =================
+
+    private async Task ExportSnapshot()
+    {
+        var snap = await _lcu.SampleAsync();
+        var path = Path.Combine(AppDirectory, $"状态快照_{DateTime.Now:yyyyMMdd_HHmmss}.txt");
+        var sb = new StringBuilder();
+        sb.AppendLine($"时间：{DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        sb.AppendLine($"lockfile：{_lcu.LockfilePath}");
+        sb.AppendLine($"客户端运行：{snap.ClientRunning}");
+        sb.AppendLine($"阶段(gameflow-phase)：{snap.Phase}");
+        sb.AppendLine($"结算状态：{snap.EogState}");
+        sb.AppendLine($"结算接口原始：{snap.EogRaw}");
+        sb.AppendLine($"窗口：{snap.WindowRect}");
+        if (!string.IsNullOrEmpty(snap.Error)) sb.AppendLine($"错误：{snap.Error}");
+        File.WriteAllText(path, sb.ToString());
+        SetStatus($"✓ 已导出：{Path.GetFileName(path)}");
+        try { Process.Start("explorer.exe", $"/select,\"{path}\""); } catch { /* 忽略 */ }
+    }
+
+    private void OpenSettings()
+    {
+        using var dlg = new SettingsForm(_settings, _plugins.PluginSections());
+        if (dlg.ShowDialog(this) == DialogResult.OK)
+        {
+            _lcu.ClientPathHint = _settings.ClientPathHint;
+            _settings.Save(AppDirectory);
+            // 插件设置也在同一个对话框里保存，通知插件把卡片状态同步过去
+            _plugins.NotifySettingsChanged();
+            ApplyPressStrength();
+            SetStatus("✓ 参数已保存");
+        }
+    }
+
+    /// <summary>把配置里的力度档下发到所有插件注册的卡片。</summary>
+    private void ApplyPressStrength()
+    {
+        foreach (var a in _plugins.Cards)
+            a.Control?.SetPressStrength(_settings.PressStrength);
+    }
+
+    /// <summary>
+    /// 日志文件限长滚动：超过 5000 行就砍掉最旧的只留尾部。
+    /// 不无限涨（没人会去清一个自己不知道会涨的文件），
+    /// 也正因为会滚，右下角「导出日志」才是永久留档的正道。
+    /// </summary>
+    private void TrimLogFile()
+    {
+        try
+        {
+            if (!File.Exists(_logPath)) return;
+            var lines = File.ReadAllLines(_logPath);
+            if (lines.Length <= 5000) return;
+            File.WriteAllLines(_logPath, lines.Skip(lines.Length - 5000));
+        }
+        catch { /* 读不出去就跳过这一次，别影响记日志 */ }
+    }
+
+    /// <summary>
+    /// 导出采样日志：文件名带时间戳（采样日志_2026-10-17_03-14-02.txt），
+    /// 默认定位到桌面。导的是**原样拷贝**，不带任何修改。
+    /// </summary>
+    private void ExportLog()
+    {
+        try
+        {
+            if (!File.Exists(_logPath))
+            {
+                SetStatus("还没有日志文件可导出", true);
+                return;
+            }
+            using var dlg = new SaveFileDialog
+            {
+                Title = "导出采样日志",
+                FileName = $"采样日志_{DateTime.Now:yyyy-MM-dd_HH-mm-ss}.txt",
+                DefaultExt = "txt",
+                Filter = "文本文件 (*.txt)|*.txt|所有文件 (*.*)|*.*",
+                InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+            };
+            if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+            File.Copy(_logPath, dlg.FileName, overwrite: true);
+            SetStatus($"✓ 日志已导出：{dlg.FileName}");
+        }
+        catch (Exception ex)
+        {
+            SetStatus($"导出失败：{ex.Message}", true);
+        }
+    }
+
+    private void UpdateHint() => _hint.Text = HintText();
+
+    /// <summary>顺带显示当前渲染缩放：如果这里显示 100% 而系统实际是 150%，那界面就是被拉伸糊掉的。</summary>
+    private string HintText()
+    {
+        int percent = (int)Math.Round(DeviceDpi * 100.0 / 96.0);
+        return $"需要 .NET 9 桌面运行时 ｜ 当前渲染缩放 {percent}%";
+    }
+
+    private void SetStatus(string text, bool warn = false)
+    {
+        _status.Text = text;
+        // 状态不只靠颜色：✓ / ⚠ / ✕ 前缀本身就是一层编码
+        _status.ForeColor = warn ? T.Error : text.StartsWith("✓") ? T.Success : TextMain;
+    }
+
+    private static void SafeInvoke(Control c, Action a)
+    {
+        try
+        {
+            if (c.IsDisposed) return;
+            if (c.InvokeRequired) c.BeginInvoke(a);
+            else a();
+        }
+        catch
+        {
+            /* 关闭窗口时不抛异常 */
+        }
+    }
+}
+
+/// <summary>
+/// 参数设置对话框。
+///
+/// 两类内容：① 宿主全局项（采样/接口路径/客户端位置/手感）—— 硬编码的几个分区；
+/// ② 插件设置 —— 按各插件 plugin.json 里的 schema 由 <see cref="MakeInput"/> 通用渲染，
+/// 插件自己一行 UI 代码都不用写。默认可见区放 show=always 的项，
+/// 开发者选项里放全局排障项 + show=dev 的插件项。
+/// </summary>
+internal sealed class SettingsForm : Form
+{
+    private readonly Settings _s;
+    private readonly List<PluginSettingsSection> _sections;
+    /// <summary>插件设置控件与存储的绑定，点保存时统一写回。</summary>
+    private readonly List<(Control Input, IPluginSettings Store, SettingSchema Schema)> _bind = new();
+    private Action? _toggleDev;   // 由构造函数末尾赋值，供快捷键调用
+
+    public SettingsForm(Settings s, List<PluginSettingsSection> sections)
+    {
+        _s = s;
+        _sections = sections;
+        T.DarkTitle(this);   // HandleCreated 之前调用也生效（DWM 会在句柄创建时应用）
+        Text = "参数设置";
+        StartPosition = FormStartPosition.CenterParent;
+        FormBorderStyle = FormBorderStyle.FixedDialog;
+        MaximizeBox = false; MinimizeBox = false;
+        ClientSize = new Size(480, 600);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        BackColor = T.BgBase;
+        Font = T.Body();
+        ForeColor = T.TxPrimary;
+
+        var root = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Padding = new Padding(T.PadOuter, 12, T.PadOuter, 8) };
+
+        var tbl = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top, ColumnCount = 2, AutoSize = true,
+            BackColor = T.BgBase,
+        };
+        tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58f));
+        tbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42f));
+
+        void Section(string text) => SectionIn(tbl, text);
+        void Row(string label, Control input, string tip = "") => RowIn(tbl, label, input, tip);
+
+        // ---- 插件设置（默认可见项）----
+        // 顺序与卡片一致：按 order 从小到大。没有 always 项的插件不占位。
+        foreach (var sec in _sections)
+        {
+            var always = sec.Schemas.Where(x => x.Show != "dev").ToList();
+            if (always.Count == 0) continue;
+            Section(sec.PluginName);
+            foreach (var sc in always)
+                Row(sc.Label, MakeInput(sc, sec.Store), sc.Note);
+        }
+
+        // ---- 开发者选项容器：默认收起 ----
+        // 采样接口、排障项这些塞进折叠区，点标题才展开。
+        var devHost = new Panel
+        {
+            Dock = DockStyle.Top, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Visible = false, BackColor = T.BgBase,
+            Padding = new Padding(T.Sp4, 0, 0, T.Sp2),
+        };
+        var devTbl = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top, ColumnCount = 2, AutoSize = true, BackColor = T.BgBase,
+        };
+        devTbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58f));
+        devTbl.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42f));
+        devHost.Controls.Add(devTbl);
+
+        void SectionD(string text) => SectionIn(devTbl, text);
+        void RowD(string label, Control input, string tip = "") => RowIn(devTbl, label, input, tip);
+
+        void SectionIn(TableLayoutPanel host, string text)
+        {
+            var l = new Label
+            {
+                Text = text, AutoSize = false, Height = T.ControlH, Dock = DockStyle.Top,
+                ForeColor = T.TxTertiary,
+                Font = T.Section(),
+                TextAlign = ContentAlignment.MiddleLeft,
+            };
+            host.Controls.Add(l, 0, host.RowCount - 0);
+            host.SetColumnSpan(l, 2);
+            host.RowCount++;
+            host.RowStyles.Add(new RowStyle(SizeType.Absolute, T.ControlH + T.Sp2));
+        }
+
+        void RowIn(TableLayoutPanel host, string label, Control input, string tip = "")
+        {
+            var l = new Label
+            {
+                Text = label, AutoSize = false, Height = T.ControlH, Dock = DockStyle.Top,
+                ForeColor = T.TxSecondary, TextAlign = ContentAlignment.MiddleLeft,
+            };
+            input.Dock = DockStyle.Top;
+            input.Height = T.ControlH;
+            host.Controls.Add(l, 0, host.RowCount - 0);
+            host.Controls.Add(input, 1, host.RowCount - 0);
+            host.RowCount++;
+            host.RowStyles.Add(new RowStyle(SizeType.Absolute, T.ControlH + T.Sp1));
+
+            if (!string.IsNullOrEmpty(tip))
+            {
+                var t = new Label
+                {
+                    Text = tip, AutoSize = false, Height = 20, Dock = DockStyle.Top,
+                    ForeColor = T.TxTertiary,
+                    Font = T.Meta(),
+                };
+                host.Controls.Add(t, 0, host.RowCount - 0);
+                host.SetColumnSpan(t, 2);
+                host.RowCount++;
+                host.RowStyles.Add(new RowStyle(SizeType.Absolute, 24f));
+            }
+        }
+
+        NumericUpDown Num(int min, int max, int val)
+        {
+            return new NumericUpDown
+            {
+                Minimum = min, Maximum = max, Value = val,
+                BackColor = T.BgSunken, ForeColor = T.TxPrimary,
+            };
+        }
+
+        TextBox Field(string text) => new()
+        {
+            Text = text, BackColor = T.BgSunken, ForeColor = T.TxPrimary,
+            BorderStyle = BorderStyle.FixedSingle,
+        };
+
+        CheckBox Check(string text, bool on) => new()
+        {
+            Text = text, Checked = on, ForeColor = T.TxPrimary,
+            Height = T.ControlH, Dock = DockStyle.Top,
+        };
+
+        SectionD("采样与订阅");
+        var cbWs = Check("用 WebSocket 订阅", _s.UseWebSocket);
+        var numPoll = Num(1, 60, _s.PollIntervalSec);
+        var numSubPoll = Num(1, 120, _s.SubscribedPollSec);
+        RowD("订阅推送", cbWs, "阶段变化实时推送；关掉就退回纯轮询");
+        RowD("轮询间隔（秒）", numPoll, "订阅未连上时用这个；也是窗口检测的频率");
+        RowD("订阅后轮询（秒）", numSubPoll, "订阅已连上时放慢到这个，只作兜底");
+
+        SectionD("接口路径（国服与外服不同，实测可改）");
+        var tbPhase = Field(_s.PhaseEndpoint);
+        var tbEog = Field(_s.EogEndpoint);
+        var tbSess = Field(_s.SessionEndpoint);
+        var numTimeout = Num(500, 30000, _s.HttpTimeoutMs);
+        RowD("阶段接口", tbPhase, "实测国服返回字符串，例如 \"None\"（大厅）");
+        RowD("结算接口", tbEog, "国服没有 /lol-end-of-game/v1/state（404 Invalid URI format）");
+        RowD("会话接口", tbSess, "对局/结算时里面带 phase 字段，作为辅助判断");
+        RowD("请求超时（毫秒）", numTimeout, "本机 4 秒够用；调大可避免误报超时");
+
+        SectionD("客户端位置");
+        var tbPath = Field(_s.ClientPathHint);
+        RowD("安装目录（可留空）", tbPath, "自动找不到时才需要填，填客户端安装目录，例如 D:\\Games\\League of Legends");
+
+        SectionD("手感");
+        var strengthHost = new Panel { BackColor = T.BgBase, Height = T.ControlH, Dock = DockStyle.Top };
+        var tbStrength = new TrackBar
+        {
+            Minimum = 0, Maximum = 100, Value = Math.Clamp(_s.PressStrength, 0, 100),
+            Dock = DockStyle.Fill, TickStyle = TickStyle.None, BackColor = T.BgBase,
+        };
+        var lblStrength = new Label
+        {
+            Text = tbStrength.Value + "%", Width = 42, Dock = DockStyle.Right,
+            ForeColor = T.TxPrimary, Font = T.Meta(), TextAlign = ContentAlignment.MiddleRight,
+        };
+        tbStrength.ValueChanged += (_, _) => lblStrength.Text = tbStrength.Value + "%";
+        // Fill 的滑杆要先 Add 才拿得到剩余宽度，读数标签后 Add 会先贴住右缘
+        strengthHost.Controls.Add(tbStrength);
+        strengthHost.Controls.Add(lblStrength);
+        RowD("按下力度", strengthHost, "按下去的反馈强度。100 = 夸张，0 = 几乎没反应");
+
+        // ---- 各插件的 dev 项 ----
+        foreach (var sec in _sections)
+        {
+            var devs = sec.Schemas.Where(x => x.Show == "dev").ToList();
+            if (devs.Count == 0) continue;
+            SectionD($"{sec.PluginName}（详细）");
+            foreach (var sc in devs)
+                RowD(sc.Label, MakeInput(sc, sec.Store), sc.Note);
+        }
+
+        // 折叠开关放在默认表最后一行的位置，展开的内容紧跟在它下面
+        // 开发者选项默认收起，且不放大按钮 —— 只留一行小字提示快捷键。
+        devHost.Visible = false;
+        var btnDev = new Button
+        {
+            Text = "[Ctrl+`] 打开开发者选项（混乱）", Height = T.ControlH, Dock = DockStyle.Top,
+            FlatStyle = FlatStyle.Flat, BackColor = T.BgBase, ForeColor = T.TxTertiary,
+            Font = T.Meta(), TextAlign = ContentAlignment.MiddleLeft, Cursor = Cursors.Hand,
+        };
+        btnDev.FlatAppearance.BorderSize = 0;
+        btnDev.FlatAppearance.MouseOverBackColor = T.BgOverlay;
+        btnDev.FlatAppearance.MouseDownBackColor = T.BgPress;
+        void ToggleDev()
+        {
+            bool open = !devHost.Visible;
+            devHost.Visible = open;
+            btnDev.Text = open ? "[-] 收起开发者选项" : "[Ctrl+`] 打开开发者选项（混乱）";
+            btnDev.ForeColor = open ? T.TxSecondary : T.TxTertiary;
+        }
+        btnDev.Click += (_, _) => ToggleDev();
+        _toggleDev = ToggleDev;
+        tbl.Controls.Add(btnDev, 0, tbl.RowCount - 0);
+
+        // 开发者选项默认完全不可见：入口由 config.json 的 "ShowDevOptions" 控制
+        // （里面全是排障项，日常用户不该看见，更不该不小心点进去改坏）。
+        // 没授权时连 Ctrl+` 快捷键一并失效，不留后门。
+        if (!_s.ShowDevOptions)
+        {
+            btnDev.Visible = false;
+            devHost.Visible = false;
+            _toggleDev = null;
+        }
+        tbl.SetColumnSpan(btnDev, 2);
+        tbl.RowCount++;
+        tbl.RowStyles.Add(new RowStyle(SizeType.Absolute, T.ControlH + T.Sp2));
+
+        // Dock.Top 从集合末尾往回停靠：devHost 先 Add 才会落到 tbl 下面
+        root.Controls.Add(devHost);
+        root.Controls.Add(tbl);
+
+        // 渲染缩放挪到这里：它是排障信息，不该占主界面一行
+        int percent = (int)Math.Round(DeviceDpi * 100.0 / 96.0);
+        var hint = new Label
+        {
+            Text = $"需要 .NET 9 桌面运行时 ｜ 当前渲染缩放 {percent}%",
+            AutoSize = false, Dock = DockStyle.Bottom, Height = 22,
+            ForeColor = T.TxTertiary, Font = T.Meta(),
+            TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(T.PadOuter, 4, 0, 0),
+        };
+
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom, Height = 56, FlowDirection = FlowDirection.RightToLeft,
+            BackColor = T.BgRaised, Padding = new Padding(0, T.Sp3, T.PadOuter, 0),
+        };
+        var ok = new Button
+        {
+            Text = "保存", Width = 96, Height = T.ControlH, FlatStyle = FlatStyle.Flat,
+            // 品牌金 + 深色字，对比度 7.6:1（白字只有 4.0:1，不达标）
+            BackColor = T.Accent, ForeColor = T.BgBase, Font = T.BodyBold(),
+            DialogResult = DialogResult.OK, Cursor = Cursors.Hand,
+        };
+        ok.FlatAppearance.BorderSize = 0;
+        var cancel = new Button
+        {
+            Text = "取消", Width = 96, Height = T.ControlH, FlatStyle = FlatStyle.Flat,
+            BackColor = T.BgRaised, ForeColor = T.TxSecondary,
+            DialogResult = DialogResult.Cancel, Cursor = Cursors.Hand,
+        };
+        cancel.FlatAppearance.BorderColor = T.BdStrong;
+        buttons.Controls.Add(ok);
+        buttons.Controls.Add(cancel);
+        AcceptButton = ok;
+        CancelButton = cancel;
+
+        Controls.Add(root);
+        Controls.Add(hint);
+        Controls.Add(buttons);
+
+        ok.Click += (_, _) =>
+        {
+            // —— 宿主全局项 ——
+            _s.UseWebSocket = cbWs.Checked;
+            _s.PollIntervalSec = (int)numPoll.Value;
+            _s.SubscribedPollSec = (int)numSubPoll.Value;
+            _s.PhaseEndpoint = tbPhase.Text.Trim();
+            _s.EogEndpoint = tbEog.Text.Trim();
+            _s.SessionEndpoint = tbSess.Text.Trim();
+            _s.HttpTimeoutMs = (int)numTimeout.Value;
+            _s.ClientPathHint = tbPath.Text.Trim();
+            _s.PressStrength = tbStrength.Value;
+
+            // —— 插件项：按绑定写回各自的 settings.json ——
+            foreach (var (input, store, sc) in _bind)
+                WriteBack(input, store, sc);
+            foreach (var sec in _sections)
+                sec.Store.Save();
+        };
+    }
+
+    // ---------- schema → 控件 / 控件 → 值 ----------
+
+    private static int SchemaInt(JsonElement? d)
+    {
+        try { return d.HasValue && d.Value.ValueKind == JsonValueKind.Number ? d.Value.GetInt32() : 0; }
+        catch { return 0; }
+    }
+
+    private static double SchemaDouble(JsonElement? d)
+    {
+        try { return d.HasValue && d.Value.ValueKind == JsonValueKind.Number ? d.Value.GetDouble() : 0d; }
+        catch { return 0d; }
+    }
+
+    private static string SchemaText(JsonElement? d)
+    {
+        try { return d.HasValue && d.Value.ValueKind == JsonValueKind.String ? d.Value.GetString() ?? "" : ""; }
+        catch { return ""; }
+    }
+
+    /// <summary>按 schema 类型造控件，并读初始值。同时登记写回绑定。</summary>
+    private Control MakeInput(SettingSchema sc, IPluginSettings store)
+    {
+        double lo = sc.Min ?? 0, hi = sc.Max ?? 999999;
+        Control input = (sc.Type ?? "text").ToLowerInvariant() switch
+        {
+            "bool" => new CheckBox
+            {
+                Checked = store.Get(sc.Key, sc.Default?.ValueKind == JsonValueKind.True),
+                ForeColor = T.TxPrimary,
+            },
+            "int" => new NumericUpDown
+            {
+                Minimum = (decimal)lo,
+                Maximum = (decimal)hi,
+                Value = Math.Clamp(store.Get(sc.Key, SchemaInt(sc.Default)),
+                                   (decimal)lo, (decimal)hi),
+                BackColor = T.BgSunken, ForeColor = T.TxPrimary,
+            },
+            "number" => new NumericUpDown
+            {
+                Minimum = (decimal)lo,
+                Maximum = (decimal)hi,
+                DecimalPlaces = 3, Increment = 0.005m,
+                Value = (decimal)Math.Clamp(store.Get(sc.Key, SchemaDouble(sc.Default)), lo, hi),
+                BackColor = T.BgSunken, ForeColor = T.TxPrimary,
+            },
+            "choice" => new ComboBox
+            {
+                DropDownStyle = ComboBoxStyle.DropDownList,
+                BackColor = T.BgSunken, ForeColor = T.TxPrimary,
+            },
+            _ => new TextBox
+            {
+                Text = store.Get(sc.Key, SchemaText(sc.Default)),
+                BackColor = T.BgSunken, ForeColor = T.TxPrimary,
+                BorderStyle = BorderStyle.FixedSingle,
+            },
+        };
+
+        if (input is ComboBox cb && sc.Options is not null)
+        {
+            cb.Items.AddRange(sc.Options.ToArray());
+            var cur = store.Get(sc.Key, sc.Options.Count > 0 ? sc.Options[0] : "");
+            if (!string.IsNullOrEmpty(cur) && cb.Items.Contains(cur)) cb.SelectedItem = cur;
+            else if (cb.Items.Count > 0) cb.SelectedIndex = 0;
+        }
+
+        _bind.Add((input, store, sc));
+        return input;
+    }
+
+    private static void WriteBack(Control input, IPluginSettings store, SettingSchema sc)
+    {
+        switch ((sc.Type ?? "text").ToLowerInvariant())
+        {
+            case "bool":
+                if (input is CheckBox c) store.Set(sc.Key, c.Checked);
+                break;
+            case "int":
+                if (input is NumericUpDown n) store.Set(sc.Key, (int)n.Value);
+                break;
+            case "number":
+                if (input is NumericUpDown d) store.Set(sc.Key, (double)d.Value);
+                break;
+            case "choice":
+                if (input is ComboBox cm) store.Set(sc.Key, cm.SelectedItem?.ToString() ?? "");
+                break;
+            default:
+                if (input is TextBox t) store.Set(sc.Key, t.Text.Trim());
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Ctrl+`（反引号）＝切换开发者选项。
+    /// 选它的理由：游戏内不会按到这个组合；60% 小键盘也有 ` 键；不和 Ctrl+Shift+D 冲突。
+    /// </summary>
+    protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
+    {
+        if (keyData == (Keys.Control | Keys.Oemtilde))
+        {
+            _toggleDev?.Invoke();
+            return true;
+        }
+        return base.ProcessCmdKey(ref msg, keyData);
+    }
+}

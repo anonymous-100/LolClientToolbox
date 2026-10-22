@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>LOLToolbox</AssemblyName>
+    <RootNamespace>LolClientToolbox</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+
+    <!-- 依赖本机 .NET 9 桌面运行时（一般机器都有），换来的好处是体积只有两百 KB 级 -->
+    <SelfContained>false</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <!-- 注意：不要开 PublishTrimmed —— .NET 明确不支持裁剪 WinForms（NETSDK1175） -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
+    <!-- 注意：EnableCompressionInSingleFile 仅自包含可用，framework-dependent 开了会报 NETSDK1176 -->
+    <DebugType>none</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <SatelliteResourceLanguages>zh-CN</SatelliteResourceLanguages>
+    <Version>1.0.0.0</Version>
+    <Copyright>LOL Client Toolbox</Copyright>
+    <Product>LOL 客户端工具箱</Product>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 插件契约：宿主只认识这一份接口定义，不认识任何插件。
+         契约与插件都是兄弟目录（src/LolClientToolbox.Contracts、src/Plugins），
+         不在本项目目录内，默认通配符编不到它们，不会出现类型双份。 -->
+    <ProjectReference Include="..\LolClientToolbox.Contracts\LolClientToolbox.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>
