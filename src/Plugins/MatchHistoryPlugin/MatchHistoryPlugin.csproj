@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- 插件自己要用 WinForms 弹窗口，所以是 net9.0-windows；
+         契约层仍然是纯净 net9.0，两边互不牵连 -->
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>MatchHistoryPlugin</AssemblyName>
+    <RootNamespace>MatchHistoryPlugin</RootNamespace>
+    <Version>1.0.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\LolClientToolbox.Contracts\LolClientToolbox.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>
