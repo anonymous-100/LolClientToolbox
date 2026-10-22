@@ -1,0 +1,7 @@
+# 默认让 Git 自己判断文本/二进制，仓库里存 LF， checkout 按平台
+* text=auto
+
+# 明确按二进制处理的资源（如有）
+*.png binary
+*.ico binary
+*.zip binary
