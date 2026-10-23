@@ -11,6 +11,11 @@
     <AssemblyName>WatchVideoPlugin</AssemblyName>
     <RootNamespace>WatchVideoPlugin</RootNamespace>
     <Version>1.0.0.0</Version>
+    <!-- WinRT 投影是「仅引用」包，类库默认不会把 Microsoft.Windows.SDK.NET.dll /
+         WinRT.Runtime.dll 复制到输出目录。插件是运行时动态加载的，
+         缺了这两个 dll 会在第一次调用媒体会话时抛 FileNotFoundException（实测踩过）。
+         所以强制把依赖复制到输出，部署时一起放进 plugins/watchvideo/。 -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>
