@@ -1,0 +1,35 @@
+{
+  "id": "watchvideo",
+  "name": "看视频（手动）",
+  "assembly": "WatchVideoPlugin.dll",
+  "entry": "WatchVideoPlugin.WatchVideoPlugin, WatchVideoPlugin",
+  "order": 60,
+  "enabled": true,
+  "description": "热键切到视频 / 切回游戏（v0 手动版）",
+  "settings": [
+    {
+      "key": "videoUrl",
+      "label": "视频网址",
+      "type": "text",
+      "default": "https://www.douyin.com/",
+      "show": "always",
+      "note": "按热键时如果浏览器没开，就用它启动。B站/YouTube/抖音网页版都行；只在「没有浏览器窗口」时才启动新页面，已有浏览器只做聚焦，不会每死一次多一个标签"
+    },
+    {
+      "key": "hotkey",
+      "label": "切换热键",
+      "type": "text",
+      "default": "Ctrl+F8",
+      "show": "always",
+      "note": "写法如 Ctrl+F8 / Alt+Shift+V。必须带 Ctrl/Alt/Shift/Win 之一，否则容易和游戏里的键冲突。改完立刻生效"
+    },
+    {
+      "key": "pauseOnReturn",
+      "label": "切回时暂停视频",
+      "type": "bool",
+      "default": true,
+      "show": "always",
+      "note": "靠媒体键（播放/暂停）实现，是切换式的：如果你自己手动暂停过视频，来回切可能会反过来。关掉它就纯切窗口、不动播放状态"
+    }
+  ]
+}
