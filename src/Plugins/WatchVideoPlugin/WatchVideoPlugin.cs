@@ -71,6 +71,8 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
     {
         if (_host.IsSelfTest) return;   // 自测模式不起轮询线程
 
+        WarnIfClientElevated();
+
         _pollStop = false;
         _hotkeyThread = new Thread(HotkeyLoop)
         {
@@ -78,6 +80,32 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
             Name = "watchvideo-hotkey",
         };
         _hotkeyThread.Start();
+    }
+
+    /// <summary>
+    /// 客户端（含游戏）以管理员权限运行时，Windows 会：
+    /// ① 忽略普通权限进程注册的全局热键 ② 禁止普通权限进程抢它的前台
+    /// ③ 甚至不把键盘状态暴露给普通权限进程（GetAsyncKeyState 也读不到）
+    /// 三件事叠加的结果就是「热键完全没反应」。启动时先喊一声，省得用户以为是插件坏了。
+    /// </summary>
+    private void WarnIfClientElevated()
+    {
+        try
+        {
+            var hwnd = FindGameWindow();
+            if (hwnd == IntPtr.Zero) return;   // 客户端没开，等它开了再说
+
+            int clientIl = Win32.IntegrityLevel(Win32.ProcessIdOf(hwnd));
+            int myIl = Win32.IntegrityLevel(Environment.ProcessId);
+            if (clientIl > myIl && myIl > 0)
+            {
+                _host.Log(LogLevel.Warn, "客户端以管理员权限运行，热键会被 Windows 拦截",
+                    $"客户端={IlName(clientIl)}，本程序={IlName(myIl)}。"
+                    + "要么以普通权限启动 Riot 客户端（推荐，一次解决），要么让本程序同样以管理员运行");
+                _host.SetStatus("⚠ 客户端是管理员权限，热键会被拦——建议用普通权限启动客户端", true);
+            }
+        }
+        catch { /* 诊断失败不影响功能 */ }
     }
 
     public void Stop()
