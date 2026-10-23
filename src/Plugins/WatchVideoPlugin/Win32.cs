@@ -26,6 +26,7 @@ internal static class Win32
 
     // ---- 窗口 ----
     public const int SW_RESTORE = 9;
+    public const int SW_MINIMIZE = 6;
     public const uint SWP_NOSIZE = 0x0001;
     public const uint SWP_NOMOVE = 0x0002;
     public const uint SWP_SHOWWINDOW = 0x0040;

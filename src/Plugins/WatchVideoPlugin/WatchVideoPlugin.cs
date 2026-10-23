@@ -261,51 +261,64 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
     }
 
     /// <summary>
-    /// 切回游戏。顺序不能变：先找到游戏窗口 → 确认前台是浏览器 → 暂停视频 → 再切前台。
-    /// 媒体键发给「当前前台窗口」，所以发之前必须确认前台真的是浏览器，
-    /// 否则会被打进游戏（实测 2026-10-24 03:27 就发生过一次：游戏在前台，媒体键给了游戏）。
+    /// 关闭视频、回到游戏。**不再去抢游戏的前台** —— 而是把视频窗口最小化，
+    /// Windows 会自己把焦点交给 Z 序下一个窗口（也就是全屏的游戏）。
+    ///
+    /// 为什么要这样：实测游戏进程是 High 完整性（提权运行），工具箱是 Medium，
+    /// UIPI 不允许低权限进程把高权限窗口拉到前台 —— 直接 SetForegroundWindow(游戏)
+    /// 必然失败。而「最小化自己的前台窗口」完全不涉及那个高权限窗口，
+    /// 因此**不需要管理员权限**。这是不用提权也能一键切回的关键。
     /// </summary>
     private void SwitchBack(string trigger)
     {
         _card.SetRunning();
 
-        var hwnd = FindGameWindow();
-        if (hwnd == IntPtr.Zero)
-            throw new InvalidOperationException("没找到游戏窗口，也没找到客户端窗口");
+        IntPtr fg = Win32.GetForegroundWindow();
+        if (fg == IntPtr.Zero || !IsBrowserProcess(ProcOf(fg)))
+            throw new InvalidOperationException("当前前台不是浏览器，没有可关闭的视频窗口");
 
-        var fgProc = ProcOf(Win32.GetForegroundWindow());
-        bool browserInFront = IsBrowserProcess(fgProc);
-
+        // 先暂停：此刻浏览器还在前台，媒体键才会落到视频上
         bool paused = false;
-        if (_pauseOnReturn && browserInFront)
+        if (_pauseOnReturn)
         {
-            Win32.SendMediaPlayPause();   // 前台是浏览器，键才会落到视频上
+            Win32.SendMediaPlayPause();
             _pausedByUs = true;
             paused = true;
             Thread.Sleep(80);
         }
 
-        bool focused = Win32.ForceForeground(hwnd);
+        // 最小化（不是关闭，视频进度/页面都保留着，下次一键就回来）
+        Win32.ShowWindow(fg, Win32.SW_MINIMIZE);
+        Thread.Sleep(160);
 
-        _card.SetResult(true, focused ? "已切回" : "已暂停");
-        _card.Restore();
+        var now = Win32.GetForegroundWindow();
+        string nowProc = ProcOf(now);
+        bool backToGame = IsGameProcess(nowProc);
 
-        var title = Win32.Title(hwnd);
-        var note = (focused ? "已聚焦" : "⚠前台切换未确认") + $" · {title}"
-                   + (paused ? " · 已暂停视频" : "")
-                   + (!_pauseOnReturn ? "" : (browserInFront ? "" : " · 前台不是浏览器，已跳过媒体键"));
-
-        // 抢不到前台时给准确原因：UIPI 规则下普通权限进程拉不动管理员权限窗口
-        if (!focused)
+        // 兜底：焦点没落到游戏（比如工具箱窗口正压在游戏上面）时再试一次抢前台。
+        // 游戏是 High 时这次会失败（UIPI），但无害；游戏不是提权运行时这次就能救回来。
+        if (!backToGame)
         {
-            var why = BlockReason(hwnd);
-            if (why.Length > 0) note += " · " + why;
+            var game = FindGameWindow();
+            if (game != IntPtr.Zero && Win32.ForceForeground(game))
+            {
+                now = Win32.GetForegroundWindow();
+                nowProc = ProcOf(now);
+                backToGame = IsGameProcess(nowProc);
+            }
         }
 
-        _host.Log(LogLevel.Auto, $"切回游戏（{trigger}）", note);
-        _host.SetStatus(focused
-            ? "◀ 已切回游戏"
-            : "⚠ 切回失败：" + (BlockReason(hwnd) is { Length: > 0 } r ? r : "前台被其他窗口占用"), true);
+        _card.SetResult(true, backToGame ? "已回到游戏" : "已关闭");
+        _card.Restore();
+
+        var note = (backToGame ? "已回到游戏" : $"⚠焦点落在 {nowProc}" + Win32.Title(now))
+                   + " · 视频窗口已最小化"
+                   + (paused ? " · 已暂停" : "")
+                   + (!backToGame && FindGameWindow() == IntPtr.Zero ? " · 没找到游戏窗口" : "");
+        _host.Log(LogLevel.Auto, $"关闭视频（{trigger}）", note);
+        _host.SetStatus(backToGame
+            ? "◀ 已关闭视频，回到游戏"
+            : $"⚠ 视频已关，但焦点不在游戏（{nowProc}）——按一下游戏窗口即可", !backToGame);
     }
 
     /// <summary>抢前台失败的原因诊断。目前唯一确定的原因是权限层级差（UIPI）。</summary>
@@ -339,6 +352,10 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
     }
 
     private static bool IsBrowserProcess(string proc) => proc.Length > 0 && Browsers.Contains(proc);
+
+    /// <summary>对局窗口（League of Legends.exe）或客户端窗口（LeagueClientUx.exe）。</summary>
+    private static bool IsGameProcess(string proc) =>
+        proc == "league of legends" || proc == "leagueclientux";
 
     // ================= 找窗口 =================
 
