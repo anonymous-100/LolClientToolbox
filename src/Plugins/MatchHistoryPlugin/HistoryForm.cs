@@ -1,10 +1,14 @@
+using System;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace MatchHistoryPlugin;
 
 /// <summary>
 /// 战绩查询窗口。深色简陋风，不追求惊艳，追求信息密度和「一眼看懂」。
+/// 上下两栏：上栏是对局列表，下栏是「当局所有人」计分板 —— 点上方一局，
+/// 下方立即显示这局 10 个人的英雄/KDA/伤害，不用再双击找详情。
 /// 所有网络访问都在 async 方法里，UI 线程不卡。
 /// </summary>
 internal sealed class HistoryForm : Form
@@ -23,6 +27,8 @@ internal sealed class HistoryForm : Form
     private Button _refresh = null!;
     private Label _summary = null!;
     private ListView _list = null!;
+    private ListView _score = null!;
+    private Label _scoreHead = null!;
     private List<GameRow> _games = new();
     private readonly List<(string Puuid, string Label)> _recent = new();
 
@@ -30,14 +36,14 @@ internal sealed class HistoryForm : Form
     {
         _svc = svc;
         Text = "查询战绩";
-        ClientSize = new Size(780, 560);
+        ClientSize = new Size(780, 620);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = C_Bg;
         ForeColor = C_Text;
         Font = new Font("Microsoft YaHei UI", 9f);
-        MinimumSize = new Size(640, 400);
+        MinimumSize = new Size(640, 480);
 
-        // ---- 顶栏 ----
+        // ---- 顶栏：查询对象 + 刷新 + 摘要 ----
         var top = new Panel { Dock = DockStyle.Top, Height = 44, BackColor = C_Panel, Padding = new Padding(10, 8, 10, 6) };
         _who = new ComboBox
         {
@@ -52,33 +58,61 @@ internal sealed class HistoryForm : Form
         _refresh.FlatAppearance.BorderColor = C_Dim;
         _summary = new Label
         {
-            AutoSize = true, ForeColor = C_Dim, Anchor = AnchorStyles.Right,
+            AutoSize = false, Width = 350, ForeColor = C_Dim, Anchor = AnchorStyles.Right,
             TextAlign = ContentAlignment.MiddleRight,
         };
-        // 简单横排：下拉框在左，摘要在右，刷新在下拉框右边
         _refresh.Left = 320;
         _summary.Left = 410;
-        _summary.Width = 350;
         top.Controls.Add(_who);
         top.Controls.Add(_refresh);
         top.Controls.Add(_summary);
 
-        // ---- 列表 ----
+        // ---- 上栏：对局列表 ----
+        var gamesPanel = new Panel { Dock = DockStyle.Top, Height = 300, BackColor = C_Bg, Padding = new Padding(10, 6, 10, 0) };
+        var gamesHead = new Label
+        {
+            Text = "对局列表 · 点击任意一局，下方显示当局所有人", Dock = DockStyle.Top, Height = 22,
+            ForeColor = C_Gold, Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Bold),
+        };
         _list = new ListView
         {
             Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, MultiSelect = false,
             GridLines = false, BackColor = C_Bg, ForeColor = C_Text, BorderStyle = BorderStyle.None,
         };
-        _list.Columns.Add("时间", 120);
-        _list.Columns.Add("模式", 110);
-        _list.Columns.Add("英雄", 110);
-        _list.Columns.Add("结果", 60);
-        _list.Columns.Add("K/D/A", 110);
-        _list.Columns.Add("伤害", 80);
-        _list.Columns.Add("时长", 70);
-        _list.MouseDoubleClick += (_, _) => ShowDetail();
+        _list.Columns.Add("时间", 110);
+        _list.Columns.Add("模式", 100);
+        _list.Columns.Add("英雄", 100);
+        _list.Columns.Add("结果", 55);
+        _list.Columns.Add("K/D/A", 100);
+        _list.Columns.Add("伤害", 70);
+        _list.Columns.Add("时长", 60);
+        _list.SelectedIndexChanged += (_, _) => ShowScoreboard();
+        gamesPanel.Controls.Add(_list);
+        gamesPanel.Controls.Add(gamesHead);
 
-        Controls.Add(_list);
+        // ---- 下栏：当局所有人计分板（占满剩余高度）----
+        var scorePanel = new Panel { Dock = DockStyle.Fill, BackColor = C_Bg, Padding = new Padding(10, 6, 10, 10) };
+        _scoreHead = new Label
+        {
+            Text = "当局所有人", Dock = DockStyle.Top, Height = 22,
+            ForeColor = C_Gold, Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Bold),
+        };
+        _score = new ListView
+        {
+            Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, GridLines = false,
+            BackColor = C_Bg, ForeColor = C_Text, BorderStyle = BorderStyle.None,
+        };
+        _score.Columns.Add("阵营", 55);
+        _score.Columns.Add("英雄", 100);
+        _score.Columns.Add("玩家", 190);
+        _score.Columns.Add("K/D/A", 95);
+        _score.Columns.Add("伤害", 70);
+        scorePanel.Controls.Add(_score);
+        scorePanel.Controls.Add(_scoreHead);
+
+        // Dock：Fill 先 Add 拿剩余空间；两个 Top 后 Add 的贴更上
+        Controls.Add(scorePanel);
+        Controls.Add(gamesPanel);
         Controls.Add(top);
 
         _refresh.Click += async (_, _) => await LoadAsync();
@@ -104,6 +138,7 @@ internal sealed class HistoryForm : Form
         }
         catch (Exception ex)
         {
+            _summary.ForeColor = C_Lose;
             _summary.Text = "初始化失败：" + ex.Message;
         }
         finally
@@ -121,17 +156,18 @@ internal sealed class HistoryForm : Form
         try
         {
             // 下拉框第 0 项是自己；其余按下标对应 _recent
-            string puuid = _who.SelectedIndex == 0
-                ? ""
-                : _recent[_who.SelectedIndex - 1].Puuid;
+            string puuid = _who.SelectedIndex == 0 ? "" : _recent[_who.SelectedIndex - 1].Puuid;
+            string whoName = _who.SelectedItem?.ToString() ?? "";
 
             _games = await _svc.GetMatchesAsync(puuid);
-            Fill();
+            Fill(whoName);
         }
         catch (Exception ex)
         {
             _games = new List<GameRow>();
             _list.Items.Clear();
+            _score.Items.Clear();
+            _scoreHead.Text = "当局所有人";
             _summary.ForeColor = C_Lose;
             _summary.Text = "查询失败：" + ex.Message;
         }
@@ -141,7 +177,7 @@ internal sealed class HistoryForm : Form
         }
     }
 
-    private void Fill()
+    private void Fill(string whoName)
     {
         _list.BeginUpdate();
         _list.Items.Clear();
@@ -165,46 +201,44 @@ internal sealed class HistoryForm : Form
         int n = _games.Count;
         double rate = n == 0 ? 0 : win * 100.0 / n;
         _summary.ForeColor = C_Dim;
-        _summary.Text = $"共 {n} 场 · 胜 {win} · 负 {n - win} · 胜率 {rate:0}%";
+        _summary.Text = n == 0
+            ? $"{whoName}：没有可显示的对局"
+            : $"{whoName} 近 {n} 局 · 胜 {win} · 负 {n - win} · 胜率 {rate:0}%";
+
+        // 默认选中第一局，直接把这局 10 个人摆出来
+        if (_list.Items.Count > 0) _list.Items[0].Selected = true;
+        else ShowScoreboard();
     }
 
-    /// <summary>双击一行：看这局的完整计分板。</summary>
-    private void ShowDetail()
+    /// <summary>选中一局 → 下栏显示这局的所有人（胜方排前面）。</summary>
+    private void ShowScoreboard()
     {
-        if (_list.SelectedItems.Count == 0) return;
-        if (_list.SelectedItems[0].Tag is not GameRow g) return;
+        _score.BeginUpdate();
+        _score.Items.Clear();
 
-        using var f = new Form
+        if (_list.SelectedItems.Count > 0 && _list.SelectedItems[0].Tag is GameRow g)
         {
-            Text = $"{g.Mode} · {g.When:yyyy-MM-dd HH:mm} · {(g.Win ? "胜利" : "失败")}",
-            ClientSize = new Size(560, 480),
-            StartPosition = FormStartPosition.CenterParent,
-            BackColor = C_Bg, ForeColor = C_Text,
-            Font = new Font("Microsoft YaHei UI", 9f),
-        };
-        var lv = new ListView
-        {
-            Dock = DockStyle.Fill, View = View.Details, FullRowSelect = true, GridLines = false,
-            BackColor = C_Bg, ForeColor = C_Text, BorderStyle = BorderStyle.None,
-        };
-        lv.Columns.Add("阵营", 60);
-        lv.Columns.Add("英雄", 110);
-        lv.Columns.Add("玩家", 180);
-        lv.Columns.Add("K/D/A", 100);
-        lv.Columns.Add("伤害", 70);
-
-        foreach (var s in g.Scoreboard)
-        {
-            var item = new ListViewItem(s.Win ? "胜方" : "负方");
-            item.SubItems.Add(s.Champion);
-            item.SubItems.Add(s.Player);
-            item.SubItems.Add($"{s.K}/{s.D}/{s.A}");
-            item.SubItems.Add(s.Damage.ToString());
-            item.ForeColor = s.Win ? C_Win : C_Lose;
-            if (s.Player.Length == 0 && s.Champion.Length == 0) continue;
-            lv.Items.Add(item);
+            _scoreHead.Text = $"当局所有人 · {g.Mode} · {g.When:MM-dd HH:mm} · {(g.Win ? "胜利" : "失败")}";
+            // 胜方优先，然后按原始顺序；没数据的行不占位
+            foreach (var s in g.Scoreboard
+                     .Where(s => s.Player.Length > 0 || s.Champion.Length > 0)
+                     .OrderByDescending(s => s.Win)
+                     .ThenBy(s => s.Player))
+            {
+                var item = new ListViewItem(s.Win ? "胜方" : "负方");
+                item.SubItems.Add(s.Champion);
+                item.SubItems.Add(s.Player);
+                item.SubItems.Add($"{s.K}/{s.D}/{s.A}");
+                item.SubItems.Add(s.Damage.ToString());
+                item.ForeColor = s.Win ? C_Win : C_Lose;
+                _score.Items.Add(item);
+            }
         }
-        f.Controls.Add(lv);
-        f.ShowDialog(this);
+        else
+        {
+            _scoreHead.Text = "当局所有人";
+        }
+
+        _score.EndUpdate();
     }
 }

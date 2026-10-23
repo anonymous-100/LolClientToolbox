@@ -109,7 +109,7 @@ internal sealed class MatchHistoryService
         var path = $"/lol-match-history/v1/products/lol/{Uri.EscapeDataString(puuid)}/matches";
         var r = await _host.GetAsync(path);
         if (r.Status < 200 || r.Status >= 300)
-            throw new InvalidOperationException($"战绩接口返回 {r.Status}（客户端没连上？）");
+            throw new InvalidOperationException(MatchErrorMessage(r.Status));
 
         var rows = new List<GameRow>();
         using var d = JsonDocument.Parse(r.Body);
@@ -187,18 +187,19 @@ internal sealed class MatchHistoryService
 
     private static string PlayerName(JsonElement ids, int pid)
     {
-        if (ids.ValueKind != JsonValueKind.Array) return "";
+        if (ids.ValueKind != JsonValueKind.Array) return $"玩家#{pid}";
         foreach (var id in ids.EnumerateArray())
         {
             if (Int(id, "participantId") != pid) continue;
-            if (!id.TryGetProperty("player", out var p)) return "";
+            if (!id.TryGetProperty("player", out var p)) break;
             var gameName = Str(p, "gameName");
             var tag = Str(p, "tagLine");
             var name = gameName.Length > 0 ? gameName : Str(p, "summonerName");
             if (tag.Length > 0) name += "#" + tag;
-            return name;
+            // 三级兜底：gameName → summonerName → 玩家#pid（国服偶发匿名，不能显示成空白）
+            return name.Length > 0 ? name : $"玩家#{pid}";
         }
-        return "";
+        return $"玩家#{pid}";
     }
 
     private async Task EnsureChampionsAsync()
@@ -218,6 +219,19 @@ internal sealed class MatchHistoryService
 
     private string ChampName(int id) =>
         _champions.TryGetValue(id, out var n) ? n : $"英雄{id}";
+
+    /// <summary>
+    /// 战绩接口的报错文案。按状态码说准话 —— 这个接口在客户端重启后 + 对局中会 500，
+    /// 凭据轮换后会 401，都说成「没连上」会把人带跑偏。
+    /// </summary>
+    private static string MatchErrorMessage(int status) => status switch
+    {
+        -1 => "客户端未连接（客户端没开？）",
+        401 => "凭据失效（客户端重启过），稍后重试或重启客户端",
+        404 => "没有对局记录",
+        500 => "战绩接口暂时不可用（客户端重启后对局中会偶发），稍后重试",
+        _ => $"战绩接口返回 {status}",
+    };
 
     // ---- JSON 小工具（缺字段/类型不对都返回默认值，绝不当众崩掉） ----
     private static string Str(JsonElement e, string prop) =>

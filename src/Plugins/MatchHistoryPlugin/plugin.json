@@ -3,7 +3,7 @@
   "name": "查询战绩",
   "assembly": "MatchHistoryPlugin.dll",
   "entry": "MatchHistoryPlugin.MatchHistoryPlugin, MatchHistoryPlugin",
-  "order": 10,
+  "order": 15,
   "enabled": true,
   "description": "查自己和最近一起玩过的人的对局记录",
   "settings": []
