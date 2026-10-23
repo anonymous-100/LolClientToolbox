@@ -17,13 +17,23 @@
     },
     {
       "key": "stuckSec",
-      "label": "卡住判定（秒）",
+      "label": "单阶段卡住判定（秒）",
       "type": "int",
       "default": 15,
       "min": 3,
       "max": 600,
       "show": "always",
-      "note": "实测正常结算全程约 24 秒、EndOfGame 停留 2-12 秒；阈值必须明显高于 12 秒，否则看战绩会被误判成卡住"
+      "note": "任一结算子阶段连续滞留这么久且无战绩数据就跳过。实测正常局单阶段最长约 3 秒（WaitingForStats）、卡住样本 EndOfGame 达 28 秒，15 秒两边都不挨着"
+    },
+    {
+      "key": "setSec",
+      "label": "结算集合判定（秒）",
+      "type": "int",
+      "default": 45,
+      "min": 10,
+      "max": 600,
+      "show": "always",
+      "note": "进入结算（WaitingForStats/PreEndOfGame/EndOfGame 任一）开始累计，只有离开或战绩出现才重置。专治客户端在子阶段间来回抖（单阶段永远攒不够）。依据：10 局正常样本集合总耗时 7-13 秒，45 秒=3.4 倍余量"
     },
     {
       "key": "requireNoStats",
