@@ -46,13 +46,16 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
     private volatile string _hotkey = DefaultHotkey;
     private volatile bool _pauseOnReturn = true;
     private volatile bool _muteGame = true;
+    private volatile bool _autoSwitchBack = true;   // 手动切回游戏时自动补一次关闭
 
     private volatile bool _pausedByUs;       // 视频是我们暂停的吗（媒体键是切换式，得记账）
     private IntPtr _browserHwnd;
     private readonly object _toggleLock = new();
 
     private Thread? _hotkeyThread;
+    private Thread? _watchThread;
     private volatile bool _pollStop;
+    private DateTime _lastAction = DateTime.MinValue;
 
     public string Id => "watchvideo";
     public string Name => "看视频（手动）";
@@ -81,6 +84,14 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
             Name = "watchvideo-hotkey",
         };
         _hotkeyThread.Start();
+
+        // 前台监听：用户手动 Alt+Tab 回游戏时，自动补一次「关闭视频」
+        _watchThread = new Thread(ForegroundWatchLoop)
+        {
+            IsBackground = true,
+            Name = "watchvideo-fgwatch",
+        };
+        _watchThread.Start();
     }
 
     /// <summary>
@@ -113,6 +124,52 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
     {
         _pollStop = true;
         try { _hotkeyThread?.Join(600); } catch { /* 退出时不计较 */ }
+        try { _watchThread?.Join(600); } catch { }
+    }
+
+    /// <summary>
+    /// 前台监听：**用户手动 Alt+Tab 回游戏**时，自动补一次「关闭视频」。
+    ///
+    /// 不按热键而自己切回去是很自然的操作，但那样视频会在后台一直播、游戏还留在静音状态
+    /// （游戏静音只有我们主动恢复才行）。所以这里盯前台窗口：
+    /// 上一刻是浏览器、这一刻变成游戏/客户端 → 当成一次「关闭视频」。
+    ///
+    /// 轮询 300ms，只读 GetForegroundWindow，不做任何侵入操作。
+    /// 只在「上一次动作之后过了一小会儿」才触发，避免和正在执行的切换打架。
+    /// </summary>
+    private void ForegroundWatchLoop()
+    {
+        IntPtr prev = IntPtr.Zero;
+        while (!_pollStop)
+        {
+            try
+            {
+                var fg = Win32.GetForegroundWindow();
+                if (fg != IntPtr.Zero && fg != prev)
+                {
+                    var prevProc = ProcOf(prev);
+                    var nowProc = ProcOf(fg);
+
+                    if (_autoSwitchBack
+                        && IsBrowserProcess(prevProc) && IsGameProcess(nowProc)
+                        && (DateTime.Now - _lastAction).TotalMilliseconds > 800)
+                    {
+                        lock (_toggleLock)
+                        {
+                            try { SwitchBack("自动"); }
+                            catch (Exception ex)
+                            {
+                                _host.Log(LogLevel.Warn, "自动切回失败（手动切回游戏时）", ex.Message);
+                            }
+                        }
+                    }
+                    prev = fg;
+                }
+            }
+            catch { /* 监听线程绝不能抛 */ }
+
+            Thread.Sleep(300);
+        }
     }
 
     public void OnSettingsChanged()
@@ -128,6 +185,7 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
         _hotkey = _settings.Get("hotkey", DefaultHotkey);
         _pauseOnReturn = _settings.Get("pauseOnReturn", true);
         _muteGame = _settings.Get("muteGame", true);
+        _autoSwitchBack = _settings.Get("autoSwitchBack", true);
         if (string.IsNullOrWhiteSpace(_url)) _url = DefaultUrl;
         if (string.IsNullOrWhiteSpace(_hotkey)) _hotkey = DefaultHotkey;
     }
@@ -305,6 +363,7 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
 
         _card.SetResult(true, "已切出");
         _card.Restore();
+        _lastAction = DateTime.Now;
 
         var note = (launched ? $"已启动 {_url}" : "聚焦已有浏览器窗口")
                    + (resumed ? " · 视频在播" : "")
@@ -348,14 +407,22 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
             try
             {
                 bool? playing = Playback.IsPlaying();
+                // 媒体键是发给「当前前台窗口」的，回退前必须确认前台是浏览器；
+                // 自动切回时前台已经是游戏了，这时候按媒体键会打进游戏里。
+                bool browserFg = IsBrowserProcess(ProcOf(Win32.GetForegroundWindow()));
                 if (playing == true) { Playback.SetPlaying(false); _pausedByUs = true; paused = true; }
                 else if (playing == false) { paused = true; }          // 已经是暂停，什么都别做
-                else { Win32.SendMediaPlayPause(); _pausedByUs = true; paused = true; }
+                else if (browserFg) { Win32.SendMediaPlayPause(); _pausedByUs = true; paused = true; }
             }
             catch
             {
-                // 拿不到状态：只有在我们认为它在播时才按一下，避免把已暂停的视频按成播放
-                if (!_pausedByUs) { Win32.SendMediaPlayPause(); paused = true; }
+                // 拿不到状态：只有在我们认为它在播、且前台是浏览器时才按一下，
+                // 避免把已暂停的视频按成播放，也避免把按键打进游戏
+                if (!_pausedByUs && IsBrowserProcess(ProcOf(Win32.GetForegroundWindow())))
+                {
+                    Win32.SendMediaPlayPause();
+                    paused = true;
+                }
             }
             Thread.Sleep(80);
         }
@@ -395,6 +462,7 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
 
         _card.SetResult(true, backToGame ? "已回到游戏" : "已关闭");
         _card.Restore();
+        _lastAction = DateTime.Now;
 
         var note = (backToGame ? "已回到游戏" : $"⚠焦点落在 {nowProc}" + Win32.Title(now))
                    + " · 视频窗口已最小化"

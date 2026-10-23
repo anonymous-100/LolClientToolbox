@@ -38,6 +38,14 @@
       "default": true,
       "show": "always",
       "note": "只静音 League of Legends.exe 这个进程的音频会话，切回时恢复。客户端不动 —— 队伍语音在客户端进程里，不能一起掐"
+    },
+    {
+      "key": "autoSwitchBack",
+      "label": "手动切回游戏也自动收尾",
+      "type": "bool",
+      "default": true,
+      "show": "always",
+      "note": "不按热键、自己 Alt+Tab 回游戏时，自动补一次「暂停视频 + 恢复游戏声音」。不勾的话只能靠热键切回，手动回去会留着后台播放"
     }
   ]
 }
