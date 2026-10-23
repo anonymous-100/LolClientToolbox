@@ -153,8 +153,7 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
             {
                 if (_autoSwitchBack && _inVideoMode)
                 {
-                    var fg = Win32.GetForegroundWindow();
-                    if (fg != IntPtr.Zero && IsGameProcess(ProcOf(fg))
+                    if (ShouldAutoClose(Win32.GetForegroundWindow(), out _)
                         && (DateTime.Now - _lastAction).TotalMilliseconds > 800)
                     {
                         lock (_toggleLock)
@@ -176,6 +175,25 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
 
             Thread.Sleep(300);
         }
+    }
+
+    /// <summary>
+    /// 自动收尾的判断条件，单独抽出来是为了能拿真实窗口句柄做验证：
+    /// 「这个前台窗口是不是该让我们收尾」。
+    /// 条件：开了自动收尾 + 当前处于视频模式 + 前台是对局/客户端窗口。
+    /// </summary>
+    private bool ShouldAutoClose(IntPtr foreground, out string reason)
+    {
+        reason = "";
+        if (!_autoSwitchBack) { reason = "自动收尾已关闭"; return false; }
+        if (!_inVideoMode) { reason = "不在视频模式"; return false; }
+        if (foreground == IntPtr.Zero) { reason = "没有前台窗口"; return false; }
+
+        var proc = ProcOf(foreground);
+        if (!IsGameProcess(proc)) { reason = $"前台是 {proc}，不是游戏"; return false; }
+
+        reason = $"前台是游戏（{proc}），该收尾";
+        return true;
     }
 
     public void OnSettingsChanged()
