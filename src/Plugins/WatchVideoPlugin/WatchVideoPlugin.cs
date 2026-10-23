@@ -47,6 +47,12 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
     private volatile bool _pauseOnReturn = true;
     private volatile bool _muteGame = true;
     private volatile bool _autoSwitchBack = true;   // 手动切回游戏时自动补一次关闭
+    /// <summary>
+    /// 当前是否处于「切出去看视频」状态（由 SwitchOut 置真、SwitchBack 置假）。
+    /// 自动收尾靠它判断，而不是靠「上一个前台是浏览器」——
+    /// Alt+Tab 过程中前台会短暂经过 Alt-Tab 面板/桌面，相邻判断一断链就再也不触发（实测）。
+    /// </summary>
+    private volatile bool _inVideoMode;
 
     private volatile bool _pausedByUs;       // 视频是我们暂停的吗（媒体键是切换式，得记账）
     private IntPtr _browserHwnd;
@@ -131,39 +137,39 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
     /// 前台监听：**用户手动 Alt+Tab 回游戏**时，自动补一次「关闭视频」。
     ///
     /// 不按热键而自己切回去是很自然的操作，但那样视频会在后台一直播、游戏还留在静音状态
-    /// （游戏静音只有我们主动恢复才行）。所以这里盯前台窗口：
-    /// 上一刻是浏览器、这一刻变成游戏/客户端 → 当成一次「关闭视频」。
+    /// （游戏静音只有我们主动恢复才行）。
+    ///
+    /// 判断依据是**状态** `_inVideoMode`（SwitchOut 置真 / SwitchBack 置假），
+    /// 不是「前一窗口是不是浏览器」—— 实测 Alt+Tab 期间前台会短暂经过 Alt-Tab 面板，
+    /// 相邻判断会断链，导致切回去时明明在视频模式却不触发。
     ///
     /// 轮询 300ms，只读 GetForegroundWindow，不做任何侵入操作。
-    /// 只在「上一次动作之后过了一小会儿」才触发，避免和正在执行的切换打架。
     /// </summary>
     private void ForegroundWatchLoop()
     {
-        IntPtr prev = IntPtr.Zero;
         while (!_pollStop)
         {
             try
             {
-                var fg = Win32.GetForegroundWindow();
-                if (fg != IntPtr.Zero && fg != prev)
+                if (_autoSwitchBack && _inVideoMode)
                 {
-                    var prevProc = ProcOf(prev);
-                    var nowProc = ProcOf(fg);
-
-                    if (_autoSwitchBack
-                        && IsBrowserProcess(prevProc) && IsGameProcess(nowProc)
+                    var fg = Win32.GetForegroundWindow();
+                    if (fg != IntPtr.Zero && IsGameProcess(ProcOf(fg))
                         && (DateTime.Now - _lastAction).TotalMilliseconds > 800)
                     {
                         lock (_toggleLock)
                         {
-                            try { SwitchBack("自动"); }
-                            catch (Exception ex)
+                            // 进锁后再确认一次：可能刚才热键已经处理掉了
+                            if (_inVideoMode)
                             {
-                                _host.Log(LogLevel.Warn, "自动切回失败（手动切回游戏时）", ex.Message);
+                                try { SwitchBack("自动"); }
+                                catch (Exception ex)
+                                {
+                                    _host.Log(LogLevel.Warn, "自动切回失败（手动切回游戏时）", ex.Message);
+                                }
                             }
                         }
                     }
-                    prev = fg;
                 }
             }
             catch { /* 监听线程绝不能抛 */ }
@@ -364,6 +370,7 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
         _card.SetResult(true, "已切出");
         _card.Restore();
         _lastAction = DateTime.Now;
+        _inVideoMode = true;   // 自动收尾的状态标志（手动 Alt+Tab 回游戏时靠它）
 
         var note = (launched ? $"已启动 {_url}" : "聚焦已有浏览器窗口")
                    + (resumed ? " · 视频在播" : "")
@@ -397,6 +404,10 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
             else
                 throw new InvalidOperationException("当前前台和记住的窗口都不是浏览器，没有可关闭的视频窗口");
         }
+
+        // 一进这里就先退出「视频模式」：即使后面失败也不再自动重试，
+        // 免得前台一直在游戏时每 800ms 重试一次、刷满日志。用户按 F8 可手动重来。
+        _inVideoMode = false;
 
         // 先暂停视频。**精确置为暂停**，不再用切换式媒体键 ——
         // 用户手动暂停过的话，切换式会把视频「切成播放」，切回游戏后后台还有声音（实测 bug）。
