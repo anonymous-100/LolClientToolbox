@@ -56,6 +56,12 @@ internal static class Win32
     public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+    /// <summary>
+    /// 键盘物理状态。不经过前台窗口，也不受 UIPI 限制 —— 游戏以管理员运行时
+    /// RegisterHotKey 注册的热键会被系统屏蔽（实测 2026-10-24），但这条能读到。
+    /// </summary>
+    [DllImport("user32.dll")]
+    public static extern short GetAsyncKeyState(int vKey);
     [DllImport("user32.dll")]
     public static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
     [DllImport("user32.dll")]

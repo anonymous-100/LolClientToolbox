@@ -51,7 +51,7 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
     private readonly object _toggleLock = new();
 
     private Thread? _hotkeyThread;
-    private uint _hotkeyThreadId;
+    private volatile bool _pollStop;
 
     public string Id => "watchvideo";
     public string Name => "看视频（手动）";
@@ -69,8 +69,9 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
 
     public void Start()
     {
-        if (_host.IsSelfTest) return;   // 自测模式不注册全局热键
+        if (_host.IsSelfTest) return;   // 自测模式不起轮询线程
 
+        _pollStop = false;
         _hotkeyThread = new Thread(HotkeyLoop)
         {
             IsBackground = true,
@@ -81,18 +82,14 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
 
     public void Stop()
     {
-        try
-        {
-            if (_hotkeyThreadId != 0)
-                Win32.PostThreadMessage(_hotkeyThreadId, Win32.WM_QUIT, IntPtr.Zero, IntPtr.Zero);
-        }
-        catch { /* 退出时不计较 */ }
+        _pollStop = true;
+        try { _hotkeyThread?.Join(600); } catch { /* 退出时不计较 */ }
     }
 
     public void OnSettingsChanged()
     {
         ReloadSettings();
-        // 热键改了要重注册：最简单可靠的做法是让旧线程退出、再起一条新的
+        // 热键改了：停掉旧线程再起一条（轮询线程读的是启动时解析出来的键）
         RestartHotkeyThread();
     }
 
@@ -108,59 +105,61 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
     // ================= 热键线程 =================
 
     /// <summary>
-    /// 热键跑在自己的线程上：RegisterHotKey 传 hWnd=0 时 WM_HOTKEY 投递到调用线程的
-    /// 消息队列，所以这条线程必须一直 GetMessage 泵着，否则热键没反应。
+    /// 热键用**轮询键盘状态**实现，不用 RegisterHotKey。
+    ///
+    /// 原因（2026-10-24 实测）：游戏进程是 High 完整性（管理员权限运行），工具箱是 Medium。
+    /// UIPI 规定低完整性进程注册的全局热键在**高完整性窗口有焦点时被系统忽略** ——
+    /// 表现就是「切进游戏后 Ctrl+F8 完全没反应」，而同一时刻在桌面上按是好的。
+    /// GetAsyncKeyState 读的是键盘物理状态，不经过前台窗口，也不受 UIPI 限制，所以能穿透。
+    ///
+    /// 代价：35ms 轮询（约 28 次/秒，开销可忽略），最坏 35ms 延迟，肉眼看不出。
     /// </summary>
     private void HotkeyLoop()
     {
-        _hotkeyThreadId = Win32.GetCurrentThreadId();
         var (mods, vk) = ParseHotkey(_hotkey);
-        bool ok = false;
-        try
-        {
-            ok = Win32.RegisterHotKey(IntPtr.Zero, HotkeyId, mods, vk);
-        }
-        catch (Exception ex)
-        {
-            _host.Log(LogLevel.Error, "热键注册异常", ex.Message);
-        }
+        _host.Log(LogLevel.Info, $"热键 {_hotkey} 已启用",
+            "轮询键盘状态（游戏提权时 RegisterHotKey 会被屏蔽，所以不用它）");
 
-        if (!ok)
+        bool wasDown = false;
+        while (!_pollStop)
         {
-            _host.Log(LogLevel.Warn,
-                $"热键 {_hotkey} 注册失败", "可能被其他程序占用；改设置里的「热键」再试");
-            return;
-        }
+            bool down = false;
+            try { down = HotkeyDown(mods, vk); } catch { /* 轮询绝不能抛 */ }
 
-        _host.Log(LogLevel.Info, $"热键 {_hotkey} 已注册", "切到视频 / 切回游戏");
+            if (down && !wasDown) Toggle("热键");   // 只在按下的那一瞬触发，长按不重复
+            wasDown = down;
 
-        try
-        {
-            while (true)
-            {
-                int r = Win32.GetMessage(out var msg, IntPtr.Zero, 0, 0);
-                if (r == 0 || r == -1) break;          // WM_QUIT 或错误
-                if (msg.message == Win32.WM_HOTKEY) Toggle("热键");
-            }
-        }
-        finally
-        {
-            try { Win32.UnregisterHotKey(IntPtr.Zero, HotkeyId); } catch { }
+            Thread.Sleep(35);
         }
     }
 
+    /// <summary>修饰键必须「该按的按下、没写的没按」，避免 Ctrl+Shift+F8 之类误触发。</summary>
+    private static bool HotkeyDown(uint mods, uint vk)
+    {
+        bool ctrl = Down(VK_CONTROL);
+        bool alt = Down(VK_MENU);
+        bool shift = Down(VK_SHIFT);
+        bool win = Down(VK_LWIN) || Down(VK_RWIN);
+
+        if (((mods & Win32.MOD_CONTROL) != 0) != ctrl) return false;
+        if (((mods & Win32.MOD_ALT) != 0) != alt) return false;
+        if (((mods & Win32.MOD_SHIFT) != 0) != shift) return false;
+        if (((mods & Win32.MOD_WIN) != 0) != win) return false;
+
+        return Down((int)vk);
+    }
+
+    private const int VK_SHIFT = 0x10;
+    private const int VK_CONTROL = 0x11;
+    private const int VK_MENU = 0x12;      // Alt
+    private const int VK_LWIN = 0x5B;
+    private const int VK_RWIN = 0x5C;
+
+    private static bool Down(int vk) => (Win32.GetAsyncKeyState(vk) & 0x8000) != 0;
+
     private void RestartHotkeyThread()
     {
-        try
-        {
-            if (_hotkeyThreadId != 0)
-            {
-                Win32.PostThreadMessage(_hotkeyThreadId, Win32.WM_QUIT, IntPtr.Zero, IntPtr.Zero);
-                _hotkeyThread?.Join(800);
-            }
-        }
-        catch { }
-        _hotkeyThreadId = 0;
+        Stop();
         Start();
     }
 
