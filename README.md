@@ -118,3 +118,19 @@ publish/LOLToolbox.exe --selftest-settings <png默认> <png展开>  # 设置窗�
 ## 许可
 
 [MIT](LICENSE)
+
+## 仓库与发布流程
+
+- 仓库：<https://github.com/anonymous-100/LolClientToolbox>（`main` 分支＝可用源码）
+- 分支策略：改动直接提交 `main`（单人项目，不折腾 PR）
+- 提交前必须：`dotnet build -c Release` 零错误零警告
+- **产物纪律**：
+  - `.dev/` 放**开发迭代**构建（未验证，随便覆盖）
+  - `dist/` 放**已验证**构建（用户确认"没问题"之后才写入）
+  - 两者都不进仓库；发布包走 GitHub Releases 附件
+- 新增/修改功能时：同步更新该插件的 `plugins/<id>/说明.md`（右键可看的就是它）
+
+### 当前状态（2026-10-24）
+
+6 个插件全部可用；「看视频」已实测：切出后视频播放、游戏静音、按热键或手动 Alt+Tab
+回游戏都会收尾（暂停视频 + 恢复声音）。
