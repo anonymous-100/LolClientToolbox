@@ -192,11 +192,16 @@ internal sealed class CardAdapter : ICard
 
     /// <summary>卡片排序号，来自 plugin.json 的 order。</summary>
     public int Order { get; }
+    /// <summary>注册这张卡的插件 id / 名称：右键菜单靠它找说明文件和设置分区。</summary>
+    public string PluginId { get; }
+    public string PluginName { get; }
 
-    public CardAdapter(ActionCard card, int order)
+    public CardAdapter(ActionCard card, int order, string pluginId = "", string pluginName = "")
     {
         _card = card;
         Order = order;
+        PluginId = pluginId;
+        PluginName = pluginName;
     }
 
     public string Title => _card.CardTitle;
@@ -372,7 +377,8 @@ internal sealed class PluginManager
 
     // ---------- 卡片注册（由 IPluginHost.RegisterCard 调用） ----------
 
-    internal CardAdapter? RegisterCard(string title, string desc, bool showAuto, int order)
+    internal CardAdapter? RegisterCard(string title, string desc, bool showAuto, int order,
+                                       string pluginId, string pluginName)
     {
         var card = new ActionCard
         {
@@ -384,11 +390,15 @@ internal sealed class PluginManager
             Height = T.CardH,
             Margin = new Padding(0, 0, 0, 4),
         };
-        var adapter = new CardAdapter(card, order);
+        var adapter = new CardAdapter(card, order, pluginId, pluginName);
         adapter.Wire();
         _cards.Add(adapter);
         return adapter;
     }
+
+    /// <summary>插件目录（右键「查看说明」从这里读 说明.md）。</summary>
+    public string? PluginFolder(string pluginId) =>
+        _plugins.FirstOrDefault(p => p.Manifest.Id == pluginId)?.Folder;
 
     // ---------- 事件订阅（由 IPluginHost 调用） ----------
 
@@ -484,7 +494,7 @@ internal sealed class PluginInitContext : IPluginHost
     public void SetStatus(string text, bool warn = false) => _inner.SetStatus(text, warn);
 
     public ICard? RegisterCard(string title, string desc, bool showAuto) =>
-        _mgr.RegisterCard(title, desc, showAuto, _manifest.Order);
+        _mgr.RegisterCard(title, desc, showAuto, _manifest.Order, _manifest.Id, _manifest.Name);
 
     public void OnPhaseChanged(Action<string> handler) => _mgr.AddPhaseHandler(handler);
     public void OnTick(Action<ClientSnapshot> handler) => _mgr.AddTickHandler(handler);

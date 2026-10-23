@@ -145,14 +145,14 @@ internal sealed class ActionCard : Button
     // ---------- 分区几何 ----------
 
     /// <summary>
-    /// 右侧轨道宽度：严格按 10% 取，卡在 [40,64]。
-    /// 宽卡片上就是精确的 9:1；窄卡片上 10% 不足 40px 放不下「自动」二字，所以保底 40。
+    /// 右侧轨道宽度：按 10% 取，卡在 [56,72]。
+    /// 下限从 44 抬到 56：卡片改两列后单卡变窄（约 430px），44px 装不下「自动」两个字，
+    /// 会被画成「自…」（实测截图确认）。
     /// </summary>
     private int RailWidth()
     {
         int w = (int)Math.Round(ClientRectangle.Width * 0.10);
-        // 下限 44：再窄就放不下「自动」两个字和开关本身了
-        return Math.Clamp(w, 44, 64);
+        return Math.Clamp(w, 56, 72);
     }
 
     /// <summary>

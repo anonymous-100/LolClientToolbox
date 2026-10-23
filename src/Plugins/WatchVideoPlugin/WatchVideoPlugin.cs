@@ -45,6 +45,7 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
     private volatile string _url = DefaultUrl;
     private volatile string _hotkey = DefaultHotkey;
     private volatile bool _pauseOnReturn = true;
+    private volatile bool _muteGame = true;
 
     private volatile bool _pausedByUs;       // 视频是我们暂停的吗（媒体键是切换式，得记账）
     private IntPtr _browserHwnd;
@@ -126,6 +127,7 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
         _url = _settings.Get("videoUrl", DefaultUrl);
         _hotkey = _settings.Get("hotkey", DefaultHotkey);
         _pauseOnReturn = _settings.Get("pauseOnReturn", true);
+        _muteGame = _settings.Get("muteGame", true);
         if (string.IsNullOrWhiteSpace(_url)) _url = DefaultUrl;
         if (string.IsNullOrWhiteSpace(_hotkey)) _hotkey = DefaultHotkey;
     }
@@ -267,24 +269,34 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
 
         bool focused = Win32.ForceForeground(hwnd);
         _browserHwnd = hwnd;
-        Thread.Sleep(120);   // 给浏览器一点时间拿到焦点，媒体键才认
+        Thread.Sleep(120);   // 给浏览器一点时间拿到焦点
 
+        // 恢复播放：优先用系统媒体会话「精确置为播放」（已经是播放状态就什么也不做），
+        // 拿不到会话才回退到切换式媒体键。
         bool resumed = false;
-        if (_pauseOnReturn && _pausedByUs)
+        if (_pauseOnReturn)
         {
-            Win32.SendMediaPlayPause();
+            if (Playback.SetPlaying(true)) resumed = true;
+            else if (_pausedByUs) { Win32.SendMediaPlayPause(); resumed = true; }
             _pausedByUs = false;
-            resumed = true;
+        }
+
+        // 只静音游戏进程 —— 队伍语音在客户端进程里，不能连客户端一起静音
+        bool muted = false;
+        if (_muteGame && IsGameRunning())
+        {
+            muted = AudioMute.SetMuteByProcessName("League of Legends", true) > 0;
         }
 
         _card.SetResult(true, "已切出");
         _card.Restore();
 
         var note = (launched ? $"已启动 {_url}" : "聚焦已有浏览器窗口")
-                   + (resumed ? " · 已恢复播放" : "")
+                   + (resumed ? " · 视频在播" : "")
+                   + (muted ? " · 已静音游戏" : "")
                    + (focused ? "" : " · ⚠前台切换未确认");
         _host.Log(LogLevel.Auto, $"切出看视频（{trigger}）", note);
-        _host.SetStatus("▶ 已切到视频 · 再按一次热键切回游戏");
+        _host.SetStatus("▶ 已切到视频（游戏已静音）· 再按一次热键切回");
     }
 
     /// <summary>
@@ -304,15 +316,26 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
         if (fg == IntPtr.Zero || !IsBrowserProcess(ProcOf(fg)))
             throw new InvalidOperationException("当前前台不是浏览器，没有可关闭的视频窗口");
 
-        // 先暂停：此刻浏览器还在前台，媒体键才会落到视频上
+        // 先暂停视频。**精确置为暂停**，不再用切换式媒体键 ——
+        // 用户手动暂停过的话，切换式会把视频「切成播放」，切回游戏后后台还有声音（实测 bug）。
         bool paused = false;
         if (_pauseOnReturn)
         {
-            Win32.SendMediaPlayPause();
-            _pausedByUs = true;
-            paused = true;
+            if (Playback.SetPlaying(false)) paused = true;
+            else if (Playback.IsPlaying() is not false)
+            {
+                // 拿不到媒体会话：退回媒体键，但只在确认前台是浏览器时才发
+                Win32.SendMediaPlayPause();
+                _pausedByUs = true;
+                paused = true;
+            }
             Thread.Sleep(80);
         }
+
+        // 取消游戏静音（必须在切回游戏前做，否则你回来时听不到任何声音）
+        bool unmuted = false;
+        if (_muteGame && IsGameRunning())
+            unmuted = AudioMute.SetMuteByProcessName("League of Legends", false) > 0;
 
         // 最小化（不是关闭，视频进度/页面都保留着，下次一键就回来）
         Win32.ShowWindow(fg, Win32.SW_MINIMIZE);
@@ -341,6 +364,7 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
         var note = (backToGame ? "已回到游戏" : $"⚠焦点落在 {nowProc}" + Win32.Title(now))
                    + " · 视频窗口已最小化"
                    + (paused ? " · 已暂停" : "")
+                   + (unmuted ? " · 游戏已恢复声音" : "")
                    + (!backToGame && FindGameWindow() == IntPtr.Zero ? " · 没找到游戏窗口" : "");
         _host.Log(LogLevel.Auto, $"关闭视频（{trigger}）", note);
         _host.SetStatus(backToGame
@@ -379,6 +403,13 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
     }
 
     private static bool IsBrowserProcess(string proc) => proc.Length > 0 && Browsers.Contains(proc);
+
+    /// <summary>对局进程在不在（静音/取消静音之前先看，免得给不存在的进程查音频会话）。</summary>
+    private static bool IsGameRunning()
+    {
+        try { return Process.GetProcessesByName("League of Legends").Length > 0; }
+        catch { return false; }
+    }
 
     /// <summary>对局窗口（League of Legends.exe）或客户端窗口（LeagueClientUx.exe）。</summary>
     private static bool IsGameProcess(string proc) =>

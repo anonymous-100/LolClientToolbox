@@ -146,7 +146,8 @@ internal sealed class MainForm : Form, IPluginHost
         FormBorderStyle = FormBorderStyle.None;
         MaximizeBox = false;
         MinimizeBox = true;
-        ClientSize = new Size(600, 720 + TitleBarH);
+        // 功能变多后单列放不下，窗口加宽到 900，卡片改两列（见下方卡片区）
+        ClientSize = new Size(900, 780 + TitleBarH);
         AutoScaleMode = AutoScaleMode.Dpi;
         BackColor = Bg;
         Font = T.Body();
@@ -219,7 +220,7 @@ internal sealed class MainForm : Form, IPluginHost
         // 日志固定 4 行（标题行 26 + 4×26 = 130）—— 永远看得见最近几条，也不跟卡片区抢高度。
         var logPanel = new Panel
         {
-            Dock = DockStyle.Bottom, Height = 26 + T.LogRowH * 4,
+            Dock = DockStyle.Bottom, Height = 26 + T.LogRowH * 5,
             BackColor = Bg, Padding = new Padding(T.PadOuter, 0, T.PadOuter, 0),
         };
         var logHead = new Panel { Dock = DockStyle.Top, Height = 26, BackColor = Bg };
@@ -239,30 +240,38 @@ internal sealed class MainForm : Form, IPluginHost
         logPanel.Controls.Add(_log);
         logPanel.Controls.Add(logHead);
 
-        // ---------- 卡片区：固定高度，超出滑动 ----------
-        // 卡片不再由宿主硬编码，而是各插件在 Init 里 RegisterCard 注册，
-        // 顺序由插件清单 plugin.json 的 order 决定（部署方改 json 就能调序）。
-        // 高度固定 382（标题栏 33 + 状态 132 + 卡片 382 + 日志 130 + 底部 76 = 753 正好铺满），
-        // 插件多到放不下时出现滚动条 —— 加插件不再挤占日志和其他区。
-        const int cardGap = 4;
-        const int cardsHostH = 382;
+        // ---------- 卡片区：两列网格，超出高度就滑动 ----------
+        // 卡片由各插件在 Init 里 RegisterCard 注册，顺序由 plugin.json 的 order 决定。
+        // 功能变多以后单列放不下（6 个插件要滚两级），改成两列：一屏能看全，也不用横向拉太宽。
+        const int cardGap = 8;
+        const int cols = 2;
         var cardsHost = new Panel
         {
-            Dock = DockStyle.Top, Height = cardsHostH, AutoScroll = true,
-            BackColor = Bg, Padding = new Padding(T.PadOuter, T.Sp3, T.PadOuter, T.Sp3),
+            Dock = DockStyle.Top, AutoScroll = true,
+            BackColor = Bg, Padding = new Padding(0),
         };
 
         // 加载插件（Init 里会 RegisterCard，所以必须晚于 _log 创建）
         _plugins.LoadAll(Path.Combine(AppDirectory, "plugins"));
 
-        // Dock.Top：最后 Add 的最先停靠（在最上面），所以按 order 倒序加
-        var ordered = _plugins.Cards.OrderByDescending(c => c.Order).ToList();
-        foreach (var a in ordered)
+        var ordered = _plugins.Cards.OrderBy(c => c.Order).ToList();
+        int rows = (ordered.Count + cols - 1) / cols;
+        int innerW = ClientSize.Width - T.PadOuter * 2;
+        int cardW = (innerW - cardGap * (cols - 1)) / cols;
+        int contentH = rows == 0 ? 0 : rows * T.CardH + (rows - 1) * cardGap;
+        cardsHost.Height = Math.Min(contentH + T.Sp3 * 2, 330);   // 最多显示约 3 行，再多就滚
+
+        for (int i = 0; i < ordered.Count; i++)
         {
-            a.Control.Dock = DockStyle.Top;
-            a.Control.Height = T.CardH;
-            a.Control.Margin = new Padding(0, 0, 0, cardGap);
-            cardsHost.Controls.Add(a.Control);
+            var a = ordered[i];
+            var c = a.Control;
+            c.Dock = DockStyle.None;
+            c.Margin = new Padding(0);
+            c.Size = new Size(cardW, T.CardH);
+            c.Location = new Point(T.PadOuter + (i % cols) * (cardW + cardGap),
+                                   T.Sp3 + (i / cols) * (T.CardH + cardGap));
+            c.ContextMenuStrip = BuildCardMenu(a);
+            cardsHost.Controls.Add(c);
         }
 
         // ---------- 底部 ----------
@@ -487,8 +496,10 @@ internal sealed class MainForm : Form, IPluginHost
     void IPluginHost.SetStatus(string text, bool warn) =>
         SafeInvoke(this, () => SetStatus(text, warn));
 
+    // 插件实际拿到的是 PluginInitContext（它带 manifest，才能把卡片和插件对上号），
+    // 宿主自己这条只是接口占位，真被调用就是 bug。
     ICard? IPluginHost.RegisterCard(string title, string desc, bool showAuto) =>
-        _plugins.RegisterCard(title, desc, showAuto, 100);
+        throw new InvalidOperationException("RegisterCard 必须经由插件上下文调用");
 
     void IPluginHost.OnPhaseChanged(Action<string> handler) => _plugins.AddPhaseHandler(handler);
     void IPluginHost.OnTick(Action<ClientSnapshot> handler) => _plugins.AddTickHandler(handler);
@@ -1020,6 +1031,59 @@ internal sealed class MainForm : Form, IPluginHost
         _status.ForeColor = warn ? T.Error : text.StartsWith("✓") ? T.Success : TextMain;
     }
 
+    // ---------- 卡片右键：功能说明 / 该功能的设置 ----------
+
+    /// <summary>每张卡片的右键菜单：看这个功能做什么、只打开这个功能的设置。</summary>
+    private ContextMenuStrip BuildCardMenu(CardAdapter card)
+    {
+        var menu = new ContextMenuStrip { Font = T.Body() };
+        menu.Items.Add("查看功能说明", null, (_, _) => ShowPluginHelp(card.PluginId, card.PluginName));
+        menu.Items.Add("打开此功能设置…", null, (_, _) => OpenSettingsForPlugin(card.PluginId));
+        return menu;
+    }
+
+    /// <summary>
+    /// 显示插件的说明文件。约定放在 plugins/&lt;id&gt;/说明.md，
+    /// 找不到就显示一段提示，不弹错误框（缺说明是内容问题，不是故障）。
+    /// </summary>
+    private void ShowPluginHelp(string pluginId, string pluginName)
+    {
+        string text = "";
+        try
+        {
+            var folder = _plugins.PluginFolder(pluginId);
+            if (folder is not null)
+            {
+                foreach (var name in new[] { "说明.md", "README.md" })
+                {
+                    var p = Path.Combine(folder, name);
+                    if (File.Exists(p)) { text = File.ReadAllText(p); break; }
+                }
+            }
+        }
+        catch (Exception ex) { text = "读取说明失败：" + ex.Message; }
+
+        if (text.Trim().Length == 0)
+            text = $"{pluginName}\n\n这个功能还没有写说明文件。\n\n按约定应放在：plugins/{pluginId}/说明.md";
+
+        using var dlg = new HelpForm($"{pluginName} · 功能说明", text);
+        dlg.ShowDialog(this);
+    }
+
+    private void OpenSettingsForPlugin(string pluginId)
+    {
+        try
+        {
+            using var dlg = new SettingsForm(_settings, _plugins.PluginSections(), pluginId);
+            dlg.ShowDialog(this);
+            ApplyPressStrength();
+        }
+        catch (Exception ex)
+        {
+            Log(LogKind.Error, "打开设置失败", ex.Message);
+        }
+    }
+
     private static void SafeInvoke(Control c, Action a)
     {
         try
@@ -1102,6 +1166,59 @@ internal sealed class MainForm : Form, IPluginHost
 /// 插件自己一行 UI 代码都不用写。默认可见区放 show=always 的项，
 /// 开发者选项里放全局排障项 + show=dev 的插件项。
 /// </summary>
+/// <summary>
+/// 功能说明查看窗：深色、只读、可拖动缩放、Ctrl+A 全选复制。
+/// 内容来自 plugins/&lt;id&gt;/说明.md —— 功能多了以后「这是干啥的」得能在程序里查到。
+/// </summary>
+internal sealed class HelpForm : Form
+{
+    public HelpForm(string title, string text)
+    {
+        T.DarkTitle(this);
+        Text = title;
+        StartPosition = FormStartPosition.CenterParent;
+        FormBorderStyle = FormBorderStyle.Sizable;
+        ClientSize = new Size(720, 620);
+        MinimumSize = new Size(460, 320);
+        BackColor = T.BgBase;
+        ForeColor = T.TxPrimary;
+        Font = T.Body();
+
+        var box = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            BorderStyle = BorderStyle.None,
+            BackColor = T.BgSunken,
+            ForeColor = T.TxPrimary,
+            Font = new Font("Microsoft YaHei UI", 10f),
+            Text = text.Replace("\r\n", "\n").Replace("\n", "\r\n"),
+        };
+
+        var bottom = new Panel
+        {
+            Dock = DockStyle.Bottom, Height = 52, BackColor = T.BgBase,
+            Padding = new Padding(T.PadOuter, 10, T.PadOuter, 8),
+        };
+        var close = new Button
+        {
+            Text = "关闭", Width = 90, Dock = DockStyle.Right,
+            FlatStyle = FlatStyle.Flat, BackColor = T.BgRaised, ForeColor = T.TxPrimary,
+            Height = T.ControlH,
+        };
+        close.FlatAppearance.BorderColor = T.TxTertiary;
+        close.Click += (_, _) => Close();
+        bottom.Controls.Add(close);
+
+        Controls.Add(box);
+        Controls.Add(bottom);
+        KeyPreview = true;
+        KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) Close(); };
+    }
+}
+
 internal sealed class SettingsForm : Form
 {
     private readonly Settings _s;
@@ -1110,16 +1227,20 @@ internal sealed class SettingsForm : Form
     private readonly List<(Control Input, IPluginSettings Store, SettingSchema Schema)> _bind = new();
     private Action? _toggleDev;   // 由构造函数末尾赋值，供快捷键调用
 
-    public SettingsForm(Settings s, List<PluginSettingsSection> sections)
+    public SettingsForm(Settings s, List<PluginSettingsSection> sections, string? onlyPluginId = null)
     {
         _s = s;
-        _sections = sections;
+        // 右键某张卡片进来的：只渲染这个插件的分区，别的都不显示
+        _sections = string.IsNullOrEmpty(onlyPluginId)
+            ? sections
+            : sections.Where(x => x.PluginId == onlyPluginId).ToList();
+        var scopeName = _sections.FirstOrDefault()?.PluginName;
         T.DarkTitle(this);   // HandleCreated 之前调用也生效（DWM 会在句柄创建时应用）
-        Text = "参数设置";
+        Text = string.IsNullOrEmpty(onlyPluginId) ? "参数设置" : $"{scopeName} · 参数设置";
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = false;
-        ClientSize = new Size(480, 600);
+        ClientSize = new Size(640, 760);
         AutoScaleMode = AutoScaleMode.Dpi;
         BackColor = T.BgBase;
         Font = T.Body();
