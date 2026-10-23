@@ -64,6 +64,14 @@ internal sealed class MainForm : Form, IPluginHost
     private static extern int SendMessage(IntPtr hWnd, int Msg, int wParam, int lParam);
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern bool ReleaseCapture();
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+        int X, int Y, int cx, int cy, uint uFlags);
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool IsWindow(IntPtr hWnd);
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_ASYNCWINDOWPOS = 0x4000;
     private const int WM_NCLBUTTONDOWN = 0xA1;
     private const int HTCAPTION = 2;
 
@@ -79,6 +87,9 @@ internal sealed class MainForm : Form, IPluginHost
     private readonly LogList _log;
     private readonly ToolTip _tip = new();
     private LcuWatcher? _watcher;
+
+    // 插件申请的辅助窗口（战绩窗口那种）：宿主只负责摆到右侧和跟随移动
+    private readonly List<(IntPtr Hwnd, int W, int H)> _auxWindows = new();
 
     private readonly Settings _settings;
     private readonly LcuClient _lcu = new();
@@ -306,6 +317,8 @@ internal sealed class MainForm : Form, IPluginHost
         _titleBar.Paint += TitleBar_Paint;
         _titleBar.MouseDown += TitleBar_MouseDown;
         _titleBar.MouseMove += TitleBar_MouseMove;
+        // 插件申请的辅助窗口跟着主窗口一起动（战绩窗口那种）
+        LocationChanged += (_, _) => RepositionAuxWindows();
         _titleBar.MouseLeave += (_, _) =>
         {
             if (_minHover || _closeHover) { _minHover = _closeHover = false; _titleBar.Invalidate(); }
@@ -498,6 +511,36 @@ internal sealed class MainForm : Form, IPluginHost
     }
 
     bool IPluginHost.EnsureClient() => _lcu.IsAttached || _lcu.TryAttach();
+
+    /// <summary>
+    /// 把插件的窗口摆到主窗口右侧。宿主不接管窗口：插件自己 Show()，
+    /// 这里只负责定位 + 主窗移动时带着走。窗口关掉后下一轮重排自动清掉。
+    /// </summary>
+    void IPluginHost.ShowAuxWindow(IntPtr hwnd, int width, int height)
+    {
+        if (hwnd == IntPtr.Zero) return;
+        if (!_auxWindows.Any(a => a.Hwnd == hwnd))
+            _auxWindows.Add((hwnd, width, height));
+        RepositionAuxWindows();
+    }
+
+    /// <summary>把全部辅助窗口重新摆到主窗口右侧（贴右边、顶端对齐，越界就钳回屏幕内）。</summary>
+    private void RepositionAuxWindows()
+    {
+        if (_auxWindows.Count == 0) return;
+        var wa = Screen.PrimaryScreen?.WorkingArea ?? new Rectangle(0, 0, 1920, 1080);
+        for (int i = _auxWindows.Count - 1; i >= 0; i--)
+        {
+            var (hwnd, w, h) = _auxWindows[i];
+            if (!IsWindow(hwnd)) { _auxWindows.RemoveAt(i); continue; }   // 窗口已关，清掉
+            int x = Right + 8;
+            int y = Top;
+            if (x + w > wa.Right) x = Math.Max(wa.Left, wa.Right - w);     // 右边放不下就贴屏幕右缘
+            if (y + h > wa.Bottom) y = Math.Max(wa.Top, wa.Bottom - h);
+            SetWindowPos(hwnd, IntPtr.Zero, x, y, w, h,
+                SWP_NOZORDER | SWP_NOACTIVATE | SWP_ASYNCWINDOWPOS);
+        }
+    }
 
     /// <summary>
     /// 【仅迁移用】读旧版 config.json 文件里的键（直接解析文件，不经过 Settings 类 ——

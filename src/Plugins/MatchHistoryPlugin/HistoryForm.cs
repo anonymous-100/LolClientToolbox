@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace MatchHistoryPlugin;
@@ -31,13 +32,16 @@ internal sealed class HistoryForm : Form
     private Label _scoreHead = null!;
     private List<GameRow> _games = new();
     private readonly List<(string Puuid, string Label)> _recent = new();
+    private int _scoreSeq;   // 计分板加载序号：连点多局时只认最后一次
 
     public HistoryForm(MatchHistoryService svc)
     {
         _svc = svc;
         Text = "查询战绩";
         ClientSize = new Size(780, 620);
-        StartPosition = FormStartPosition.CenterScreen;
+        // 位置由宿主摆（IPluginHost.ShowAuxWindow → 主窗口右侧），这里不自己定位
+        StartPosition = FormStartPosition.Manual;
+        Location = new Point(-2000, -2000);   // 宿主摆好前的临时位，避免屏幕中间闪一下
         BackColor = C_Bg;
         ForeColor = C_Text;
         Font = new Font("Microsoft YaHei UI", 9f);
@@ -86,7 +90,7 @@ internal sealed class HistoryForm : Form
         _list.Columns.Add("K/D/A", 100);
         _list.Columns.Add("伤害", 70);
         _list.Columns.Add("时长", 60);
-        _list.SelectedIndexChanged += (_, _) => ShowScoreboard();
+        _list.SelectedIndexChanged += async (_, _) => await ShowScoreboardAsync();
         gamesPanel.Controls.Add(_list);
         gamesPanel.Controls.Add(gamesHead);
 
@@ -118,6 +122,11 @@ internal sealed class HistoryForm : Form
         _refresh.Click += async (_, _) => await LoadAsync();
         Shown += async (_, _) => await InitAsync();
     }
+
+    /// <summary>自检用：当前两栏的行数、计分板表头文字和窗口位置。</summary>
+    internal (int Games, int Scores) Counts => (_list.Items.Count, _score.Items.Count);
+    internal string ScoreHeadText => _scoreHead.Text;
+    internal string WindowPos => $"({Location.X},{Location.Y}) {ClientSize.Width}×{ClientSize.Height}";
 
     /// <summary>打开窗口：填查询对象下拉框（自己 + 最近一起玩过的人），并自动查自己。</summary>
     private async Task InitAsync()
@@ -207,38 +216,59 @@ internal sealed class HistoryForm : Form
 
         // 默认选中第一局，直接把这局 10 个人摆出来
         if (_list.Items.Count > 0) _list.Items[0].Selected = true;
-        else ShowScoreboard();
+        else _ = ShowScoreboardAsync();
     }
 
-    /// <summary>选中一局 → 下栏显示这局的所有人（胜方排前面）。</summary>
-    private void ShowScoreboard()
+    /// <summary>
+    /// 选中一局 → 下栏显示这局的所有人（胜方排前面）。
+    /// 完整 10 人数据按 gameId 另拉一个端点（列表端点只带被查询者 1 人，实测 2026-10-24）。
+    /// </summary>
+    private async Task ShowScoreboardAsync()
     {
-        _score.BeginUpdate();
-        _score.Items.Clear();
-
-        if (_list.SelectedItems.Count > 0 && _list.SelectedItems[0].Tag is GameRow g)
-        {
-            _scoreHead.Text = $"当局所有人 · {g.Mode} · {g.When:MM-dd HH:mm} · {(g.Win ? "胜利" : "失败")}";
-            // 胜方优先，然后按原始顺序；没数据的行不占位
-            foreach (var s in g.Scoreboard
-                     .Where(s => s.Player.Length > 0 || s.Champion.Length > 0)
-                     .OrderByDescending(s => s.Win)
-                     .ThenBy(s => s.Player))
-            {
-                var item = new ListViewItem(s.Win ? "胜方" : "负方");
-                item.SubItems.Add(s.Champion);
-                item.SubItems.Add(s.Player);
-                item.SubItems.Add($"{s.K}/{s.D}/{s.A}");
-                item.SubItems.Add(s.Damage.ToString());
-                item.ForeColor = s.Win ? C_Win : C_Lose;
-                _score.Items.Add(item);
-            }
-        }
-        else
+        if (_list.SelectedItems.Count == 0 || _list.SelectedItems[0].Tag is not GameRow g)
         {
             _scoreHead.Text = "当局所有人";
+            _score.Items.Clear();
+            return;
         }
 
+        int seq = ++_scoreSeq;
+        _scoreHead.Text = $"当局所有人 · {g.Mode} · {g.When:MM-dd HH:mm} · 加载中…";
+        _score.Items.Clear();
+
+        List<ScoreLine> rows;
+        try
+        {
+            rows = await _svc.GetScoreboardAsync(g.GameId);
+        }
+        catch (Exception ex)
+        {
+            if (seq != _scoreSeq) return;   // 已经又点了别的局，这次的结果作废
+            _scoreHead.Text = $"当局所有人 · {g.Mode} · 加载失败：{ex.Message}";
+            return;
+        }
+        if (seq != _scoreSeq) return;       // 连点保护：只渲染最后一次选中的局
+
+        _score.BeginUpdate();
+        _score.Items.Clear();
+        // 胜方优先，然后按原始顺序；没数据的行不占位
+        foreach (var s in rows
+                 .Where(s => s.Player.Length > 0 || s.Champion.Length > 0)
+                 .OrderByDescending(s => s.Win)
+                 .ThenBy(s => s.Player))
+        {
+            var item = new ListViewItem(s.Win ? "胜方" : "负方");
+            item.SubItems.Add(s.Champion);
+            item.SubItems.Add(s.Player);
+            item.SubItems.Add($"{s.K}/{s.D}/{s.A}");
+            item.SubItems.Add(s.Damage.ToString());
+            item.ForeColor = s.Win ? C_Win : C_Lose;
+            _score.Items.Add(item);
+        }
         _score.EndUpdate();
+
+        _scoreHead.Text = rows.Count == 0
+            ? $"当局所有人 · {g.Mode} · 这局没有玩家数据"
+            : $"当局所有人 · {g.Mode} · {g.When:MM-dd HH:mm} · {rows.Count} 人 · {(g.Win ? "胜利" : "失败")}";
     }
 }

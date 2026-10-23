@@ -7,6 +7,7 @@ namespace MatchHistoryPlugin;
 /// <summary>一局比赛的摘要行。</summary>
 internal sealed class GameRow
 {
+    public long GameId;
     public DateTime When;
     public string Mode = "";
     public string Champion = "";
@@ -122,6 +123,7 @@ internal sealed class MatchHistoryService
         foreach (var g in arr.EnumerateArray())
         {
             var row = new GameRow();
+            row.GameId = Long(g, "gameId");   // 局号，按局拉完整计分板用
             row.Mode = ModeLabel(Str(g, "gameMode"), Int(g, "queueId"));
             row.DurationSec = Int(g, "gameDuration");
 
@@ -185,6 +187,43 @@ internal sealed class MatchHistoryService
 
     // 查自己时 puuid 在 GetMatchesAsync 内部自动取，这里不再需要缓存
 
+    /// <summary>
+    /// 按局号拉「当局所有人」的完整计分板。
+    ///
+    /// 【实测】列表端点（matches）每局只带 1 个 participant（被查询者本人），
+    /// 2026-10-24 本机验证：participants=1。完整 10 人数据在另一个端点：
+    /// GET /lol-match-history/v1/games/{gameId} → participants=10，字段与列表里一致。
+    /// </summary>
+    public async Task<List<ScoreLine>> GetScoreboardAsync(long gameId)
+    {
+        var r = await _host.GetAsync($"/lol-match-history/v1/games/{gameId}");
+        if (r.Status < 200 || r.Status >= 300)
+            throw new InvalidOperationException(MatchErrorMessage(r.Status));
+
+        var list = new List<ScoreLine>();
+        using var d = JsonDocument.Parse(r.Body);
+        if (!d.RootElement.TryGetProperty("participantIdentities", out var ids)
+            || !d.RootElement.TryGetProperty("participants", out var parts)
+            || parts.ValueKind != JsonValueKind.Array)
+            return list;
+
+        foreach (var p in parts.EnumerateArray())
+        {
+            var st = p.TryGetProperty("stats", out var s) ? s : default;
+            list.Add(new ScoreLine
+            {
+                Champion = ChampName(Int(p, "championId")),
+                Player = PlayerName(ids, Int(p, "participantId")),
+                K = Int(st, "kills"),
+                D = Int(st, "deaths"),
+                A = Int(st, "assists"),
+                Damage = Int(st, "totalDamageDealtToChampions"),
+                Win = Bool(st, "win"),
+            });
+        }
+        return list;
+    }
+
     private static string PlayerName(JsonElement ids, int pid)
     {
         if (ids.ValueKind != JsonValueKind.Array) return $"玩家#{pid}";
@@ -241,6 +280,11 @@ internal sealed class MatchHistoryService
     private static int Int(JsonElement e, string prop) =>
         e.ValueKind == JsonValueKind.Object && e.TryGetProperty(prop, out var v)
         && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var n) ? n : 0;
+
+    /// <summary>局号是 long（实测值 11402794228，超 int 范围，用 Int32 解析会得 0）。</summary>
+    private static long Long(JsonElement e, string prop) =>
+        e.ValueKind == JsonValueKind.Object && e.TryGetProperty(prop, out var v)
+        && v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out var n) ? n : 0;
 
     private static bool Bool(JsonElement e, string prop) =>
         e.ValueKind == JsonValueKind.Object && e.TryGetProperty(prop, out var v)

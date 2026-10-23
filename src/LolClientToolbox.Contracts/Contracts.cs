@@ -146,6 +146,18 @@ public interface IPluginHost
     /// <see cref="IPluginSettings"/> 里。
     /// </summary>
     T GetLegacy<T>(string key, T fallback);
+
+    /// <summary>
+    /// 把插件自建的窗口摆到主窗口右侧，并让它跟着主窗口一起移动。
+    ///
+    /// 用途：插件的独立窗口不要用 ShowDialog（模态）—— 那会挡住主窗口的其他功能。
+    /// 正确姿势：插件自己 new Form、自己调 Show()（非模态），再把窗口句柄交给宿主定位。
+    /// 宿主只负责摆位置和跟随移动，不接管窗口的任何行为。
+    /// </summary>
+    /// <param name="hwnd">插件窗口的句柄（Form.Handle）。</param>
+    /// <param name="width">窗口宽度（像素）。</param>
+    /// <param name="height">窗口高度（像素）。</param>
+    void ShowAuxWindow(IntPtr hwnd, int width, int height);
 }
 
 /// <summary>插件入口。每个插件 DLL 里必须有一个 public 无参构造的类型实现它。</summary>

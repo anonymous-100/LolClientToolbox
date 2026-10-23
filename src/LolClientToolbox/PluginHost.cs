@@ -495,5 +495,7 @@ internal sealed class PluginInitContext : IPluginHost
     public Task<(bool Ok, int Status, string Body)> PostExAsync(string path, string body = "{}") =>
         _inner.PostExAsync(path, body);
     public bool EnsureClient() => _inner.EnsureClient();
+    public void ShowAuxWindow(IntPtr hwnd, int width, int height) =>
+        _inner.ShowAuxWindow(hwnd, width, height);
     public T GetLegacy<T>(string key, T fallback) => _inner.GetLegacy<T>(key, fallback);
 }
