@@ -46,7 +46,6 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
     private volatile string _hotkey = DefaultHotkey;
     private volatile bool _pauseOnReturn = true;
 
-    private volatile bool _watching;         // 当前是不是「在视频那边」
     private volatile bool _pausedByUs;       // 视频是我们暂停的吗（媒体键是切换式，得记账）
     private IntPtr _browserHwnd;
     private readonly object _toggleLock = new();
@@ -201,12 +200,15 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
         {
             try
             {
-                if (_watching) SwitchBack(trigger);
+                // 方向看真实前台，不看内部标志 —— 用户会手动 Alt+Tab，标志早就失真。
+                // 实测 2026-10-24 03:27 就因此做反了方向：进对局后第一次按，去执行「切回」，
+                // 结果什么也没发生（还白给游戏发了媒体键）。
+                bool browserInFront = IsBrowserProcess(ProcOf(Win32.GetForegroundWindow()));
+                if (browserInFront) SwitchBack(trigger);
                 else SwitchOut(trigger);
             }
             catch (Exception ex)
             {
-                _watching = false;
                 _card.SetResult(false, "失败");
                 _card.Restore();
                 _host.Log(LogLevel.Error, $"切视频失败（{trigger}）：{ex.Message}");
@@ -248,7 +250,6 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
             resumed = true;
         }
 
-        _watching = true;
         _card.SetResult(true, "已切出");
         _card.Restore();
 
@@ -260,8 +261,9 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
     }
 
     /// <summary>
-    /// 切回游戏。顺序不能变：先找到游戏窗口 → 暂停视频 → 再切前台。
-    /// 先把游戏拉到前台再发媒体键的话，按键会打进游戏（Space 是视角回中）。
+    /// 切回游戏。顺序不能变：先找到游戏窗口 → 确认前台是浏览器 → 暂停视频 → 再切前台。
+    /// 媒体键发给「当前前台窗口」，所以发之前必须确认前台真的是浏览器，
+    /// 否则会被打进游戏（实测 2026-10-24 03:27 就发生过一次：游戏在前台，媒体键给了游戏）。
     /// </summary>
     private void SwitchBack(string trigger)
     {
@@ -271,27 +273,72 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
         if (hwnd == IntPtr.Zero)
             throw new InvalidOperationException("没找到游戏窗口，也没找到客户端窗口");
 
+        var fgProc = ProcOf(Win32.GetForegroundWindow());
+        bool browserInFront = IsBrowserProcess(fgProc);
+
         bool paused = false;
-        if (_pauseOnReturn)
+        if (_pauseOnReturn && browserInFront)
         {
-            Win32.SendMediaPlayPause();   // 此刻浏览器仍在前台，键发给它
+            Win32.SendMediaPlayPause();   // 前台是浏览器，键才会落到视频上
             _pausedByUs = true;
             paused = true;
             Thread.Sleep(80);
         }
 
         bool focused = Win32.ForceForeground(hwnd);
-        _watching = false;
 
-        _card.SetResult(true, "已切回");
+        _card.SetResult(true, focused ? "已切回" : "已暂停");
         _card.Restore();
 
         var title = Win32.Title(hwnd);
         var note = (focused ? "已聚焦" : "⚠前台切换未确认") + $" · {title}"
-                   + (paused ? " · 已暂停视频" : "");
+                   + (paused ? " · 已暂停视频" : "")
+                   + (!_pauseOnReturn ? "" : (browserInFront ? "" : " · 前台不是浏览器，已跳过媒体键"));
+
+        // 抢不到前台时给准确原因：UIPI 规则下普通权限进程拉不动管理员权限窗口
+        if (!focused)
+        {
+            var why = BlockReason(hwnd);
+            if (why.Length > 0) note += " · " + why;
+        }
+
         _host.Log(LogLevel.Auto, $"切回游戏（{trigger}）", note);
-        _host.SetStatus(focused ? "◀ 已切回游戏" : "⚠ 切回失败：前台被其他窗口占用");
+        _host.SetStatus(focused
+            ? "◀ 已切回游戏"
+            : "⚠ 切回失败：" + (BlockReason(hwnd) is { Length: > 0 } r ? r : "前台被其他窗口占用"), true);
     }
+
+    /// <summary>抢前台失败的原因诊断。目前唯一确定的原因是权限层级差（UIPI）。</summary>
+    private static string BlockReason(IntPtr target)
+    {
+        try
+        {
+            int targetIl = Win32.IntegrityLevel(Win32.ProcessIdOf(target));
+            int myIl = Win32.IntegrityLevel(Environment.ProcessId);
+            if (targetIl > 0 && myIl > 0 && targetIl > myIl)
+                return $"目标窗口是{IlName(targetIl)}，本程序是{IlName(myIl)}，"
+                       + "Windows 不允许低权限进程抢高权限窗口的前台 → 右键以管理员身份运行工具箱";
+        }
+        catch { /* 诊断失败不影响主流程 */ }
+        return "";
+    }
+
+    private static string IlName(int il) => il switch
+    {
+        >= 0x4000 => "系统权限",
+        >= 0x3000 => "管理员权限",
+        >= 0x2000 => "普通权限",
+        _ => "低权限",
+    };
+
+    private static string ProcOf(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return "";
+        try { return Process.GetProcessById(Win32.ProcessIdOf(hwnd)).ProcessName.ToLowerInvariant(); }
+        catch { return ""; }
+    }
+
+    private static bool IsBrowserProcess(string proc) => proc.Length > 0 && Browsers.Contains(proc);
 
     // ================= 找窗口 =================
 

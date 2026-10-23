@@ -94,6 +94,58 @@ internal static class Win32
     [DllImport("kernel32.dll")]
     public static extern uint GetCurrentThreadId();
 
+    // ---- 完整性级别（判断对方是不是提权进程，决定能不能抢它的前台）----
+    private const uint PROCESS_QUERY_LIMITED_INFORMATION = 0x1000;
+    private const uint TOKEN_QUERY = 0x0008;
+    private const int TokenIntegrityLevel = 25;
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr OpenProcess(uint dwDesiredAccess, bool bInheritHandle, int dwProcessId);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr hObject);
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool OpenProcessToken(IntPtr hProcess, uint dwDesiredAccess, out IntPtr hToken);
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool GetTokenInformation(IntPtr hToken, int cls, IntPtr buf, int len, out int retLen);
+
+    /// <summary>
+    /// 进程完整性级别：0x2000=Medium（普通）、0x3000=High（管理员）。取不到返回 -1。
+    /// UIPI 规则：普通权限进程不能把管理员权限窗口拉到前台 —— 抢不到时靠这个给准确提示。
+    /// </summary>
+    public static int IntegrityLevel(int pid)
+    {
+        IntPtr h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid);
+        if (h == IntPtr.Zero) return -1;
+        try
+        {
+            if (!OpenProcessToken(h, TOKEN_QUERY, out var token)) return -1;
+            try
+            {
+                GetTokenInformation(token, TokenIntegrityLevel, IntPtr.Zero, 0, out int len);
+                if (len <= 0) return -1;
+                IntPtr buf = Marshal.AllocHGlobal(len);
+                try
+                {
+                    if (!GetTokenInformation(token, TokenIntegrityLevel, buf, len, out _)) return -1;
+                    IntPtr sid = Marshal.ReadIntPtr(buf);          // TOKEN_MANDATORY_LABEL.Label.Sid
+                    if (sid == IntPtr.Zero) return -1;
+                    byte subCount = Marshal.ReadByte(sid, 1);      // SID 子权限个数
+                    // SID = 修订号(1) + 个数(1) + 机构(6) + 子权限[count]*4；最后一个就是 IL
+                    return Marshal.ReadInt32(sid, 8 + (subCount - 1) * 4);
+                }
+                finally { Marshal.FreeHGlobal(buf); }
+            }
+            finally { CloseHandle(token); }
+        }
+        finally { CloseHandle(h); }
+    }
+
+    public static int ProcessIdOf(IntPtr hwnd)
+    {
+        GetWindowThreadProcessId(hwnd, out var pid);
+        return (int)pid;
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct KEYBDINPUT
     {
