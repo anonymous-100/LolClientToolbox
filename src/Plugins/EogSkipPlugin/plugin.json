@@ -1,0 +1,63 @@
+{
+  "id": "eogskip",
+  "name": "跳过卡结算",
+  "assembly": "EogSkipPlugin.dll",
+  "entry": "EogSkipPlugin.EogSkipPlugin, EogSkipPlugin",
+  "order": 20,
+  "enabled": true,
+  "description": "结算卡住时自动跳过",
+  "settings": [
+    {
+      "key": "auto",
+      "label": "卡结算自动跳过",
+      "type": "bool",
+      "default": true,
+      "show": "always",
+      "note": "结算阶段停滞超过设定秒数（或战绩数据生成立即被清除）时，自动 POST play-again"
+    },
+    {
+      "key": "stuckSec",
+      "label": "卡住判定（秒）",
+      "type": "int",
+      "default": 15,
+      "min": 3,
+      "max": 600,
+      "show": "always",
+      "note": "实测正常结算全程约 24 秒、EndOfGame 停留 2-12 秒；阈值必须明显高于 12 秒，否则看战绩会被误判成卡住"
+    },
+    {
+      "key": "requireNoStats",
+      "label": "战绩判定",
+      "type": "bool",
+      "default": true,
+      "show": "always",
+      "note": "勾上则「有战绩数据」时不算卡住。这是比秒数更硬的判据"
+    },
+    {
+      "key": "cooldownMs",
+      "label": "跳过冷却（毫秒）",
+      "type": "int",
+      "default": 60000,
+      "min": 0,
+      "max": 600000,
+      "show": "always",
+      "note": "两次自动跳过之间的最小间隔"
+    },
+    {
+      "key": "endpoint",
+      "label": "战绩数据接口",
+      "type": "text",
+      "default": "/lol-end-of-game/v1/eog-stats-block",
+      "show": "dev",
+      "note": "实测国服只有这个存在；/lol-end-of-game/v1/state 是 404 Invalid URI format"
+    },
+    {
+      "key": "phases",
+      "label": "结算相关阶段",
+      "type": "text",
+      "default": "WaitingForStats,PreEndOfGame,EndOfGame",
+      "show": "dev",
+      "note": "逗号分隔。卡点常在 EndOfGame 之前，别只写 EndOfGame"
+    }
+  ]
+}

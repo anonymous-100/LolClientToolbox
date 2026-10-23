@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>AcceptPlugin</AssemblyName>
+    <RootNamespace>AcceptPlugin</RootNamespace>
+    <Version>1.0.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\LolClientToolbox.Contracts\LolClientToolbox.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>WindowFixPlugin</AssemblyName>
+    <RootNamespace>WindowFixPlugin</RootNamespace>
+    <Version>1.0.0.0</Version>
+    <!-- 需要 Win32 P/Invoke，但不需要 WinForms；net9.0 即可 -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\LolClientToolbox.Contracts\LolClientToolbox.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

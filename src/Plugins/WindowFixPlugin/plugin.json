@@ -1,0 +1,96 @@
+{
+  "id": "windowfix",
+  "name": "恢复窗口大小",
+  "assembly": "WindowFixPlugin.dll",
+  "entry": "WindowFixPlugin.WindowFixPlugin, WindowFixPlugin",
+  "order": 10,
+  "enabled": true,
+  "description": "窗口尺寸异常时自动修复",
+  "settings": [
+    {
+      "key": "auto",
+      "label": "窗口守护",
+      "type": "bool",
+      "default": false,
+      "show": "always",
+      "note": "尺寸/比例异常并持续一段时间后自动修复。对局进行中会自动跳过（那时窗口缩小是正常的）"
+    },
+    {
+      "key": "baseW",
+      "label": "目标宽度",
+      "type": "int",
+      "default": 1600,
+      "min": 320,
+      "max": 7680,
+      "show": "always",
+      "note": "修复后的窗口基准宽，实际会再乘客户端缩放比"
+    },
+    {
+      "key": "baseH",
+      "label": "目标高度",
+      "type": "int",
+      "default": 900,
+      "min": 240,
+      "max": 4320,
+      "show": "always",
+      "note": "1920×1080 的屏幕填 1920×1080 会更舒服"
+    },
+    {
+      "key": "cooldownMs",
+      "label": "修复冷却（毫秒）",
+      "type": "int",
+      "default": 15000,
+      "min": 0,
+      "max": 300000,
+      "show": "always",
+      "note": "两次自动修复之间的最小间隔"
+    },
+    {
+      "key": "minW",
+      "label": "最小宽度",
+      "type": "int",
+      "default": 1024,
+      "min": 320,
+      "max": 7680,
+      "show": "dev",
+      "note": "低于这个宽度算异常（即便宽高比是对的）"
+    },
+    {
+      "key": "minH",
+      "label": "最小高度",
+      "type": "int",
+      "default": 576,
+      "min": 240,
+      "max": 4320,
+      "show": "dev"
+    },
+    {
+      "key": "aspectTol",
+      "label": "宽高比容差",
+      "type": "number",
+      "default": 0.02,
+      "min": 0.001,
+      "max": 0.5,
+      "show": "dev",
+      "note": "与 16:9 的允许偏差，越严越容易误判"
+    },
+    {
+      "key": "holdMs",
+      "label": "异常持续（毫秒）",
+      "type": "int",
+      "default": 3000,
+      "min": 0,
+      "max": 60000,
+      "show": "dev",
+      "note": "避免拖拽窗口时误触发"
+    },
+    {
+      "key": "inGamePhases",
+      "label": "对局中不做守护",
+      "type": "text",
+      "default": "GameStart,InProgress,Reconnect",
+      "show": "dev",
+      "note": "这些阶段里窗口本来就会缩到很小（实测 170×47），属正常，不能当故障修"
+    }
+  ]
+}

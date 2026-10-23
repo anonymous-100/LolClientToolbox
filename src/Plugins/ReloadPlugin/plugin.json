@@ -1,0 +1,10 @@
+{
+  "id": "reload",
+  "name": "热重载客户端",
+  "assembly": "ReloadPlugin.dll",
+  "entry": "ReloadPlugin.ReloadPlugin, ReloadPlugin",
+  "order": 30,
+  "enabled": true,
+  "description": "重启客户端界面",
+  "settings": []
+}

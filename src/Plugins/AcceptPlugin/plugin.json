@@ -1,0 +1,27 @@
+{
+  "id": "accept",
+  "name": "接收对局",
+  "assembly": "AcceptPlugin.dll",
+  "entry": "AcceptPlugin.AcceptPlugin, AcceptPlugin",
+  "order": 40,
+  "enabled": true,
+  "description": "匹配成功弹出确认框时自动点接受",
+  "settings": [
+    {
+      "key": "auto",
+      "label": "自动接收",
+      "type": "bool",
+      "default": true,
+      "show": "always",
+      "note": "匹配成功弹出确认框时自动点「接受」。确认框有倒计时，超时不接受会被判定秒退排队"
+    },
+    {
+      "key": "endpoint",
+      "label": "接受接口",
+      "type": "text",
+      "default": "/lol-matchmaking/v1/ready-check/accept",
+      "show": "dev",
+      "note": "经客户端 /help 核实（functions 里有 PostLolMatchmakingV1ReadyCheckAccept）。网上流传的 /lol-lobby/v2/ready-check/accept 是未实现的错路径，别改"
+    }
+  ]
+}
