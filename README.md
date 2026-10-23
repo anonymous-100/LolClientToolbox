@@ -3,12 +3,17 @@
 英雄联盟客户端的本地小工具集。**插件架构**：宿主只负责界面和客户端连接，功能全部是
 `plugins/` 目录下的插件 —— 加功能不用改宿主，单插件失效不影响其他。
 
-当前功能：
+当前功能（5 个插件）：
 
-- **查询战绩** —— 查自己或「最近一起玩过的人」的近 20 局：模式/英雄/胜负/KDA/伤害/时长，双击看完整计分板
+- **恢复窗口大小** —— 窗口尺寸异常时自动修，也可点左侧立即修
+- **查询战绩** —— 查自己或「最近一起玩过的人」的近 20 局；点选一局，下方显示当局所有人 10 个人的完整计分板
+- **跳过卡结算** —— 结算卡住时自动跳过（双判据：阶段停滞超时 / 战绩数据生成立即被清除）
+- **热重载客户端** —— 界面卡死点它
+- **接收对局** —— 匹配成功弹出确认框时自动点接受
 
-> 窗口修复、跳过卡结算、热重载、自动接收对局在旧单文件版（`E:\games\LOL客户端`，止步 v22），
-> 不再维护；要迁进来按「插件开发手册」包一层即可，判据和实现都在旧源码里。
+> 前四个从旧单文件版（`E:\games\LOL客户端`，止步 v22）迁移而来，逻辑与判据原样保留；
+> 「查询战绩」是本仓库原生的新功能。卡片区固定高度 + 滚动条：插件超过 4 个时
+> 第 5 个起进滚动区（改 plugin.json 的 `order` 可调顺序）。
 
 ## 运行
 
@@ -26,7 +31,8 @@ publish/LOLToolbox.exe
 ## 插件开发
 
 见 [插件开发手册.md](插件开发手册.md)：契约、生命周期、plugin.json  schema、
-打包放置、故障隔离约定、红线。参考实现：`src/Plugins/MatchHistoryPlugin/`。
+打包放置、故障隔离约定、红线、自测方法。参考实现：`src/Plugins/MatchHistoryPlugin/`（原生）、
+`src/Plugins/WindowFixPlugin/` 等四个（旧版迁移）。
 
 ## 目录
 
@@ -34,9 +40,24 @@ publish/LOLToolbox.exe
 src/
 ├─ LolClientToolbox/            宿主（纯外壳）
 ├─ LolClientToolbox.Contracts/  插件契约
-└─ Plugins/MatchHistoryPlugin/  查询战绩
+└─ Plugins/
+   ├─ WindowFixPlugin/          恢复窗口大小（旧版迁移）
+   ├─ EogSkipPlugin/            跳过卡结算（旧版迁移）
+   ├─ ReloadPlugin/             热重载客户端（旧版迁移）
+   ├─ AcceptPlugin/             接收对局（旧版迁移）
+   └─ MatchHistoryPlugin/       查询战绩（原生）
 publish/                        可运行产物（gitignore）
 ```
+
+## 自测（不弹窗）
+
+```bash
+publish/LOLToolbox.exe --selftest <png>                    # 主窗口离屏自渲染
+publish/LOLToolbox.exe --selftest-settings <png默认> <png展开>  # 设置窗离屏自渲染 + 控件清单入日志
+```
+
+截图存盘后自动退出；设置窗的验证还会把每一行 schema 的「标签 + 控件类型 + 当前值」
+写进 `采样日志.txt`（搜「自测·设置行」），比肉眼核对截图可靠。
 
 ## 技术备注
 
@@ -44,7 +65,7 @@ publish/                        可运行产物（gitignore）
   普通权限即可（国服客户端不写 lockfile）；LCU 是 Riot 非官方接口，个人自用（合规分析见上节）。
 - 宿主仍是 framework-dependent 单文件 exe；插件在 `plugins/<id>/` 下动态加载
   （自定义 `AssemblyLoadContext`，Contracts 复用宿主持有的那一份保证类型同一性）。
-- 窗口修复算法曾参考开源项目 `LeagueTavern/fix-lcu-window`（MIT），该功能未随插件版发布。
+- 窗口修复算法参考开源项目 `LeagueTavern/fix-lcu-window`（MIT），已内联为 WindowFixPlugin。
 
 ## 合规与风险（2026-10-23 查证）
 

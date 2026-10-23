@@ -22,10 +22,17 @@ internal static class Program
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
-        // 隐藏的自测入口：--selftest <png路径> 启动后把主窗口自渲染成图存盘再退出，
-        // 供自动化冒烟测试用（不依赖屏幕前台，游戏全屏盖住也能截）。
+        // 隐藏的自测入口（不依赖屏幕前台，游戏全屏盖住也能截，用户看不到）：
+        //   --selftest <png>            主窗口离屏自渲染
+        //   --selftest-settings <png默认> <png展开1> [png展开2] [png展开3]
+        //                               设置窗离屏自渲染：默认态一张；展开开发者选项后
+        //                               分段滚着截（离屏窗口高度会被系统钳制，一张截不完）
+        //                               （插件设置 schema 的通用渲染必须定期用这个验）
         string? shotPath = args.Length >= 2 && args[0] == "--selftest" ? args[1] : null;
-        Application.Run(new MainForm(shotPath));
+        string? settingsShot = args.Length >= 3 && args[0] == "--selftest-settings" ? args[1] : null;
+        var settingsDevShots = args.Length >= 3 && args[0] == "--selftest-settings"
+            ? args.Skip(2).ToArray() : Array.Empty<string>();
+        Application.Run(new MainForm(shotPath, settingsShot, settingsDevShots));
     }
 }
 
@@ -44,6 +51,8 @@ internal sealed class MainForm : Form, IPluginHost
     private readonly Label _output;
     private readonly Label _hint;
     private readonly string? _selftestShot;
+    private readonly string? _settingsShot;
+    private readonly string[] _settingsDevShots;
 
     // ---------- 自绘标题栏 ----------
     private Panel _titleBar = null!;
@@ -96,9 +105,11 @@ internal sealed class MainForm : Form, IPluginHost
     private static readonly Color TextMain = T.TxPrimary;
     private static readonly Color TextDim = T.TxTertiary;
 
-    public MainForm(string? selftestShot = null)
+    public MainForm(string? selftestShot = null, string? settingsShot = null, string[]? settingsDevShots = null)
     {
         _selftestShot = selftestShot;
+        _settingsShot = settingsShot;
+        _settingsDevShots = settingsDevShots ?? Array.Empty<string>();
         _logPath = Path.Combine(AppDirectory, "采样日志.txt");
         _settings = Settings.Load(AppDirectory);
         _lcu.ClientPathHint = _settings.ClientPathHint;
@@ -108,7 +119,7 @@ internal sealed class MainForm : Form, IPluginHost
         Text = "LOL 客户端工具箱";
         // 自测模式把窗口画到屏幕外：截图依然真实（窗口已实际创建并布局），
         // 但用户看不到 —— 不会像之前那样反复弹窗打扰人
-        if (selftestShot is not null)
+        if (selftestShot is not null || settingsShot is not null)
         {
             StartPosition = FormStartPosition.Manual;
             Location = new Point(-3000, -3000);
@@ -349,6 +360,70 @@ internal sealed class MainForm : Form, IPluginHost
                     }
                     catch { /* 存不了就算了，别挡退出 */ }
                     Close();
+                };
+                t.Start();
+            }
+
+            if (settingsShot is not null)
+            {
+                // 设置窗离屏渲染：默认态一张；展开「开发者选项」后分段滚着截。
+                // 插件设置的 schema 通用渲染（分区/勾选/数字框/文本框/滑杆）全靠这个定期验证。
+                var t = new System.Windows.Forms.Timer { Interval = 800 };
+                t.Tick += (_, _) =>
+                {
+                    t.Stop();
+                    Form? dlg = null;
+                    try
+                    {
+                        // 测试专用：临时翻开开发者选项开关（仅内存，不落盘）——
+                        // 否则按钮不可见，而 PerformClick 走 CanSelect，不可见时点了没反应
+                        _settings.ShowDevOptions = true;
+                        dlg = new SettingsForm(_settings, _plugins.PluginSections());
+                        dlg.StartPosition = FormStartPosition.Manual;
+                        dlg.Location = new Point(-3000, -3000);
+                        dlg.ShowInTaskbar = false;
+                        dlg.Show();
+
+                        var step2 = new System.Windows.Forms.Timer { Interval = 400 };
+                        step2.Tick += (_, _) =>
+                        {
+                            step2.Stop();
+                            try { ShootForm(dlg, settingsShot); } catch { }
+                            if (_settingsDevShots.Length == 0) { dlg.Close(); Close(); return; }
+
+                            var step3 = new System.Windows.Forms.Timer { Interval = 400 };
+                            step3.Tick += (_, _) =>
+                            {
+                                step3.Stop();
+                                try
+                                {
+                                    FindDevButton(dlg)?.PerformClick();   // 展开开发者选项
+                                    dlg.PerformLayout();
+
+                                    // 像素截图只作留证；真正的验证是下面的控件清单——
+                                    // 每一行 schema 的标签、控件类型、当前值全部导进日志，
+                                    // 比肉眼截图可靠（DrawToBitmap 还不认滚动偏移，截不全）
+                                    if (_settingsDevShots.Length > 0)
+                                        ShootForm(dlg, _settingsDevShots[0]);
+                                    DumpSettingsForm(dlg);
+                                    Log(LogKind.Info, "自测", "设置窗渲染：控件清单已入日志");
+                                }
+                                catch (Exception ex)
+                                {
+                                    Log(LogKind.Warn, "自测", "设置窗展开态验证失败：" + ex.Message);
+                                }
+                                dlg.Close();
+                                Close();
+                            };
+                            step3.Start();
+                        };
+                        step2.Start();
+                    }
+                    catch
+                    {
+                        dlg?.Close();
+                        Close();
+                    }
                 };
                 t.Start();
             }
@@ -913,6 +988,65 @@ internal sealed class MainForm : Form, IPluginHost
         catch
         {
             /* 关闭窗口时不抛异常 */
+        }
+    }
+
+    /// <summary>自测用：把（屏幕外的）窗口自渲染存盘。</summary>
+    private static void ShootForm(Form f, string path)
+    {
+        using var bmp = new Bitmap(f.Width, f.Height);
+        f.DrawToBitmap(bmp, new Rectangle(Point.Empty, bmp.Size));
+        bmp.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+    }
+
+    /// <summary>自测用：递归找设置窗里那个「开发者选项」折叠按钮。</summary>
+    private static Button? FindDevButton(Control root)
+    {
+        foreach (Control c in root.Controls)
+        {
+            if (c is Button b && c.Text.Contains("开发者选项")) return b;
+            var hit = FindDevButton(c);
+            if (hit is not null) return hit;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 自测用：把设置窗里每个 TableLayoutPanel 的每一行（标签 + 控件类型 + 当前值）
+    /// 导进日志。插件设置的 schema 通用渲染是否正确，看这个清单就行 ——
+    /// 比肉眼核对截图可靠，也不会漏（DrawToBitmap 截不全滚动区）。
+    /// </summary>
+    private void DumpSettingsForm(Form dlg)
+    {
+        foreach (var tbl in AllControls(dlg).OfType<TableLayoutPanel>())
+        {
+            for (int r = 0; r < tbl.RowCount; r++)
+            {
+                var label = tbl.GetControlFromPosition(0, r) as Label;
+                var input = tbl.GetControlFromPosition(1, r);
+                if (label is null && input is null) continue;
+                string val = input switch
+                {
+                    CheckBox cb => cb.Checked ? "✓开" : "✗关",
+                    NumericUpDown n => n.Value.ToString(),
+                    TextBox t => $"\"{t.Text}\"",
+                    ComboBox c => c.SelectedItem?.ToString() ?? "(空)",
+                    TrackBar tb => tb.Value + "%",
+                    null => "(无控件)",
+                    _ => input.GetType().Name,
+                };
+                Log(LogKind.Info, "自测·设置行", $"[{label?.Text ?? "?"}] {input?.GetType().Name ?? "—"} = {val}");
+            }
+        }
+    }
+
+    private static IEnumerable<Control> AllControls(Control root)
+    {
+        foreach (Control c in root.Controls)
+        {
+            yield return c;
+            foreach (var sub in AllControls(c))
+                yield return sub;
         }
     }
 }
