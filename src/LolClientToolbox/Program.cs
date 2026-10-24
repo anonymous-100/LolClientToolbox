@@ -251,7 +251,10 @@ internal sealed class MainForm : Form, IPluginHost
             BackColor = Bg, Padding = new Padding(0),
         };
 
-        // 加载插件（Init 里会 RegisterCard，所以必须晚于 _log 创建）
+        // 加载插件（Init 里会 RegisterCard，所以必须晚于 _log 创建）。
+        // 先把程序目录写进日志：仓库里可能同时存在 .dev / .dev-new / dist 好几份构建，
+        // 跑错实例时「功能明明写了却不生效」极难排查（2026-10-25 就踩过一次）。
+        Log(LogKind.Info, "启动", $"程序目录 {AppDirectory}");
         _plugins.LoadAll(Path.Combine(AppDirectory, "plugins"));
 
         var ordered = _plugins.Cards.OrderBy(c => c.Order).ToList();

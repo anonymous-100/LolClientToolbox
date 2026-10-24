@@ -117,7 +117,11 @@ public sealed class DeathWatchPlugin : ILolPlugin, ISettingsChangedAware, ISelfT
         _minRespawnSec = Math.Max(1, _settings.Get("minRespawnSec", 8));
         _pollMs = Math.Clamp(_settings.Get("pollMs", 500), 200, 5000);
         _ocrFallback = _settings.Get("ocrFallback", true);
-        _endpoint = _settings.Get("endpoint", "/liveclientdata/activeplayer");
+        // ⚠ 默认值必须是 allgamedata：2026-10-25 真机实测 respawnTimer 不在
+        // /liveclientdata/activeplayer 里（那个端点没有死亡信息），只在 allPlayers[] 中，
+        // 而 allPlayers 只有 allgamedata 才有。回退成 activeplayer 会永远取不到数据，
+        // 表现为「日志里一直说接口取不到，却从不切出去」。
+        _endpoint = _settings.Get("endpoint", "/liveclientdata/allgamedata");
         _port = Math.Clamp(_settings.Get("port", 2999), 1, 65535);
         _timeoutMs = Math.Clamp(_settings.Get("timeoutMs", 900), 200, 5000);
         _assumedRespawnSec = Math.Clamp(_settings.Get("assumedRespawnSec", 15), 1, 90);
