@@ -6,6 +6,18 @@
 
 ## P0 · 下一轮就做
 
+### 0. 待拍板：从 API 手册里挖出来的候选（2026-10-25 全量扫过本机 /help）
+端点都已在 `/help` 的 functions 里确认存在，价值/风险评价见 `API手册.md` 第七节。
+
+| # | 想法 | 推荐度 | 关键端点 |
+|---|---|---|---|
+| A | **自动锁英雄（+禁用）** | ★★★ 高频痛点，且与已做的「自动接收」串成开局链 | `Patch /lol-champ-select/v1/session/actions/{id}` |
+| B | **战绩列表接回放**（下载/观看） | ★★★ gameId 已在手边，是现有插件的自然延伸 | `Post /lol-replays/v1/rofls/{gameId}/download` |
+| C | 符文页自动套用 | ★★ 按选中英雄切符文页 | `Put /lol-perks/v1/currentpage` |
+| D | 结算后自动点赞 | ★★ 成本极低，凑「打完就走」闭环 | `Post /lol-honor-v2/v1/honor-player` |
+| E | 自动排队 | ★ 只在「上一局刚结束」时触发，默认关 | `Post /lol-matchmaking/v1/search` |
+| F | 选人界面一键静音队友 | ★ 小功能 | `Post /lol-champ-select/v1/toggle-player-muted` |
+
 ### 1. ✅ 看视频 v1：自动检测死亡/复活（2026-10-25 完成，DeathWatchPlugin）
 - ~~数据源：activePlayer.respawnTimer~~ → **真机实测推翻**：respawnTimer 在
   `allPlayers[]` 里（activePlayer 没有这个字段），按 riotIdGameName 认出自己再读

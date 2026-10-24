@@ -34,6 +34,14 @@ internal static class Program
     private static void Main(string[] args)
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
+
+        // 子命令：不跑插件检查，改为连客户端本身（写 API 手册 / 挖新功能时用）
+        if (args.Length > 0 && args[0] is "cred" or "api")
+        {
+            LcuCommand(args[0]);
+            return;
+        }
+
         var root = FindPluginsRoot(args.FirstOrDefault());
         if (root is null)
         {
@@ -67,6 +75,40 @@ internal static class Program
         Console.WriteLine();
         Console.WriteLine($"== 结果：{_pass} 过 / {_fail} 挂 ==");
         Environment.Exit(_fail == 0 ? 0 : 1);
+    }
+
+    /// <summary>
+    /// 子命令：cred = 只打印 LCU 凭据；api = 拉客户端自己给的 /help 端点清单。
+    /// 端点清单是写手册的第一手来源，比网上抄的准（版本一变就对不上）。
+    /// </summary>
+    private static void LcuCommand(string cmd)
+    {
+        var cred = Lcu.Attach();
+        if (cred is null)
+        {
+            Console.WriteLine("✕ 没连上客户端：LeagueClientUx / LeagueClient 进程都不在，或命令行里没有凭据。");
+            Console.WriteLine("  先开客户端再跑。");
+            Environment.Exit(2);
+        }
+
+        var (port, pwd, src) = cred.Value;
+        Console.WriteLine($"✓ 凭据来源：{src}");
+        Console.WriteLine($"  端口 {port}  口令 {pwd}");
+        if (cmd == "cred") { Environment.Exit(0); return; }
+
+        using var http = Lcu.Client(port, pwd);
+        var (status, body) = Lcu.GetAsync(http, "/help").GetAwaiter().GetResult();
+        if (status != 200)
+        {
+            Console.WriteLine($"✕ /help 返回 {status}（{body}）");
+            Environment.Exit(1);
+        }
+
+        var outPath = Path.Combine(Path.GetTempPath(), "lcu_help.json");
+        File.WriteAllText(outPath, body);
+        Console.WriteLine($"\n✓ 端点清单已存：{outPath}（{body.Length} 字节）");
+        Console.WriteLine("  前 400 字符：");
+        Console.WriteLine("  " + body.Substring(0, Math.Min(400, body.Length)).Replace("\n", "\n  "));
     }
 
     private static void Run(string name, Func<(bool, string)> check)
