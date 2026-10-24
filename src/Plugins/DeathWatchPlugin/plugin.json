@@ -1,0 +1,123 @@
+{
+  "id": "deathwatch",
+  "name": "看视频（自动）",
+  "assembly": "DeathWatchPlugin.dll",
+  "entry": "DeathWatchPlugin.DeathWatchPlugin, DeathWatchPlugin",
+  "order": 65,
+  "enabled": true,
+  "description": "死亡自动切到视频、复活自动切回",
+  "settings": [
+    {
+      "key": "auto",
+      "label": "自动检测死亡",
+      "type": "bool",
+      "default": true,
+      "show": "always",
+      "note": "对局中检测到死亡就自动切到视频，复活（倒计时归零）自动切回。关掉后本插件只检测、不切换"
+    },
+    {
+      "key": "minRespawnSec",
+      "label": "至少还剩几秒才切出",
+      "type": "int",
+      "default": 8,
+      "min": 1,
+      "max": 60,
+      "show": "always",
+      "note": "复活倒计时低于这个数就不切 —— 剩 3 秒来回切一次反而烦。死亡瞬间读到的就是总时长，不会中途变卦"
+    },
+    {
+      "key": "ocrFallback",
+      "label": "Live 接口挂了用屏幕兜底",
+      "type": "bool",
+      "default": true,
+      "show": "always",
+      "note": "主数据源是官方 Live Client Data API（https://127.0.0.1:2999）。取不到时改为看自己屏幕：画面被去色（死亡灰屏）即判死亡，再 OCR 中下部读倒计时秒数"
+    },
+    {
+      "key": "pollMs",
+      "label": "检测间隔（毫秒）",
+      "type": "int",
+      "default": 500,
+      "min": 200,
+      "max": 5000,
+      "show": "dev",
+      "note": "轮询 Live 接口的间隔。本地 https，开销极小；500ms 足够赶上复活瞬间"
+    },
+    {
+      "key": "endpoint",
+      "label": "Live 接口端点",
+      "type": "text",
+      "default": "/liveclientdata/allgamedata",
+      "show": "dev",
+      "note": "必须是 https（游戏自签证书），用 http 连不上。⚠ respawnTimer 不在 activePlayer 里、在 allPlayers[] 里（2026-10-25 真机实测），所以默认端点是 allgamedata；/liveclientdata/activeplayer 这个端点里没有死亡信息"
+    },
+    {
+      "key": "port",
+      "label": "Live 接口端口",
+      "type": "int",
+      "default": 2999,
+      "min": 1,
+      "max": 65535,
+      "show": "dev"
+    },
+    {
+      "key": "timeoutMs",
+      "label": "接口超时（毫秒）",
+      "type": "int",
+      "default": 900,
+      "min": 200,
+      "max": 5000,
+      "show": "dev",
+      "note": "接口只在对局中存在，不在对局时会连不上；超时短一点可以让检测线程不被拖住"
+    },
+    {
+      "key": "assumedRespawnSec",
+      "label": "OCR 读不到时按几秒估",
+      "type": "int",
+      "default": 15,
+      "min": 1,
+      "max": 90,
+      "show": "dev",
+      "note": "只在屏幕兜底模式下用：灰屏判定成功但 OCR 没读出倒计时时，按这个数决定「值不值得切」以及何时切回"
+    },
+    {
+      "key": "satThreshold",
+      "label": "灰屏饱和度阈值",
+      "type": "number",
+      "default": 40,
+      "min": 1,
+      "max": 80,
+      "show": "dev",
+      "note": "画面平均饱和度（0-255）低于此值判为「死亡灰屏」。2026-10-25 真机实测活着时约 84（彩色对局），死后整屏去色会大幅下降；判不出死亡就把值调高，没死就误判就把值调低"
+    },
+    {
+      "key": "bandTop",
+      "label": "倒计时取样上沿",
+      "type": "number",
+      "default": 0.55,
+      "min": 0,
+      "max": 1,
+      "show": "dev",
+      "note": "画面高度的比例。只 OCR 这一条横带，避免把队友 ID、技能说明识别进来"
+    },
+    {
+      "key": "bandBottom",
+      "label": "倒计时取样下沿",
+      "type": "number",
+      "default": 0.85,
+      "min": 0,
+      "max": 1,
+      "show": "dev"
+    },
+    {
+      "key": "screenEveryMs",
+      "label": "屏幕采样间隔（毫秒）",
+      "type": "int",
+      "default": 1200,
+      "min": 300,
+      "max": 10000,
+      "show": "dev",
+      "note": "抓屏 + OCR 有实际开销，别和 Live 接口同频。只在兜底模式下生效"
+    }
+  ]
+}

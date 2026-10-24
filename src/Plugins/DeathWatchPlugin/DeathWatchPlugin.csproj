@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- 需要 Windows SDK 投影：屏幕兜底要用 Windows.Media.Ocr（系统自带 OCR 组件）
+         和 Windows.Graphics.Imaging.SoftwareBitmap。跟「看视频（手动）」一样，
+         这些是「仅引用」包，必须强制复制到输出，否则运行时才炸。 -->
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>DeathWatchPlugin</AssemblyName>
+    <RootNamespace>DeathWatchPlugin</RootNamespace>
+    <Version>1.0.0.0</Version>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\LolClientToolbox.Contracts\LolClientToolbox.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -158,6 +158,17 @@ public interface IPluginHost
     /// <param name="width">窗口宽度（像素）。</param>
     /// <param name="height">窗口高度（像素）。</param>
     void ShowAuxWindow(IntPtr hwnd, int width, int height);
+
+    /// <summary>
+    /// 找**别的插件**提供的能力（按接口找，找不到返回 null）。
+    ///
+    /// 例：<c>host.GetService&lt;IVideoSwitcher&gt;()</c> 拿到「看视频」插件，
+    /// 然后死亡检测插件就能指挥它切出去/切回来，自己完全不用碰窗口和焦点。
+    ///
+    /// 注意：只能在 <see cref="ILolPlugin.Start"/> 及之后调用 —— Init 阶段后面的插件还没加载。
+    /// 拿不到是正常情况（对方没装 / 在清单里被禁用），不要当成错误。
+    /// </summary>
+    T? GetService<T>() where T : class;
 }
 
 /// <summary>插件入口。每个插件 DLL 里必须有一个 public 无参构造的类型实现它。</summary>
@@ -193,4 +204,31 @@ public interface ISelfTestAware
 public interface ISettingsChangedAware
 {
     void OnSettingsChanged();
+}
+
+/// <summary>
+/// 可选接口：**插件之间互相提供能力**的唯一通道。
+///
+/// 背景：插件各自在自己的 <c>AssemblyLoadContext</c> 里，彼此看不见类型，
+/// 唯一共享的是本契约程序集。所以「一个插件想指挥另一个插件」必须把能力
+/// 声明成这里的接口 —— 提供方的插件类型实现它，使用方通过
+/// <see cref="IPluginHost.GetService{T}"/> 拿到实例。
+///
+/// 约定：
+///   · 使用方**必须接受拿不到**（返回 null）—— 对方插件可能被禁用或没装；
+///   · 提供方的方法不许抛异常到使用方（内部 try/catch + 自己记日志）；
+///   · 在 <see cref="ILolPlugin.Start"/> 里取服务，别在 Init 里取（那时后面的插件还没加载）。
+/// </summary>
+public interface IVideoSwitcher
+{
+    /// <summary>当前是否处于「切出去看视频」状态（由提供方自己维护）。</summary>
+    bool InVideoMode { get; }
+
+    /// <summary>切出去看视频。已是视频模式、或前台本来就是浏览器时应当什么都不做。</summary>
+    /// <param name="reason">触发原因，只进日志（如「死亡 12s」）。</param>
+    void SwitchOut(string reason);
+
+    /// <summary>关闭视频回到游戏。不在视频模式时应当什么都不做。</summary>
+    /// <param name="reason">触发原因，只进日志（如「已复活」）。</param>
+    void SwitchBack(string reason);
 }

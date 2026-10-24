@@ -575,6 +575,16 @@ internal sealed class MainForm : Form, IPluginHost
         return fallback;
     }
 
+    /// <summary>
+    /// 插件间服务发现：从已加载的插件里按接口找（见契约里的 IVideoSwitcher）。
+    /// </summary>
+    /// <remarks>
+    /// 这里写成 public 而不是显式接口实现，是因为显式实现里的 <c>T?</c> 会被
+    /// 编译器当成 <c>Nullable&lt;T&gt;</c>（CS0453）—— 约束虽然从接口继承，
+    /// 但它判断「T? 是可空引用还是可空值类型」时不认。写成普通 public 方法就没这个歧义。
+    /// </remarks>
+    public T? GetService<T>() where T : class => _plugins.FindService<T>();
+
     private static LogKind MapKind(LogLevel level) => level switch
     {
         LogLevel.Phase => LogKind.Phase,

@@ -22,7 +22,7 @@ namespace WatchVideoPlugin;
 /// 3. 所有 Win32 调用都可能因权限/UIPI 失败（游戏若以管理员运行就抢不到前台），
 ///    一律 try/catch + 日志，绝不把异常抛回宿主。
 /// </summary>
-public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
+public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware, IVideoSwitcher
 {
     /// <summary>默认视频地址。用户可在设置里改成任何网址（B站/YouTube/抖音网页版都行）。</summary>
     private const string DefaultUrl = "https://www.douyin.com/";
@@ -161,7 +161,7 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
                             // 进锁后再确认一次：可能刚才热键已经处理掉了
                             if (_inVideoMode)
                             {
-                                try { SwitchBack("自动"); }
+                                try { DoSwitchBack("自动"); }
                                 catch (Exception ex)
                                 {
                                     _host.Log(LogLevel.Warn, "自动切回失败（手动切回游戏时）", ex.Message);
@@ -315,8 +315,8 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
                 // 实测 2026-10-24 03:27 就因此做反了方向：进对局后第一次按，去执行「切回」，
                 // 结果什么也没发生（还白给游戏发了媒体键）。
                 bool browserInFront = IsBrowserProcess(ProcOf(Win32.GetForegroundWindow()));
-                if (browserInFront) SwitchBack(trigger);
-                else SwitchOut(trigger);
+                if (browserInFront) DoSwitchBack(trigger);
+                else DoSwitchOut(trigger);
             }
             catch (Exception ex)
             {
@@ -328,8 +328,49 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
         }
     }
 
+    // ================= 对外能力（IVideoSwitcher） =================
+    //
+    // 「看视频（自动）」插件（deathwatch）靠这个指挥本插件，自己完全不碰窗口/焦点。
+    // 两个方法都不抛异常：调用方是别的插件的后台线程，抛过去只会记一条看不懂的日志。
+    // 幂等是硬要求 —— 自动检测可能每 500ms 就想切一次，重复调用必须什么都不做。
+
+    public bool InVideoMode => _inVideoMode;
+
+    public void SwitchOut(string reason)
+    {
+        try
+        {
+            lock (_toggleLock)
+            {
+                if (_inVideoMode) return;                                   // 已经在看，别重复切
+                if (IsBrowserProcess(ProcOf(Win32.GetForegroundWindow()))) return;  // 前台本来就是浏览器
+                DoSwitchOut(reason);
+            }
+        }
+        catch (Exception ex)
+        {
+            _host.Log(LogLevel.Warn, $"自动切出失败（{reason}）", ex.Message);
+        }
+    }
+
+    public void SwitchBack(string reason)
+    {
+        try
+        {
+            lock (_toggleLock)
+            {
+                if (!_inVideoMode) return;      // 没在视频模式，没什么可收的
+                DoSwitchBack(reason);
+            }
+        }
+        catch (Exception ex)
+        {
+            _host.Log(LogLevel.Warn, $"自动切回失败（{reason}）", ex.Message);
+        }
+    }
+
     /// <summary>切出去看视频：找浏览器（没有就启动）→ 聚焦 → 上次是我们暂停的就恢复播放。</summary>
-    private void SwitchOut(string trigger)
+    private void DoSwitchOut(string trigger)
     {
         _card.SetRunning();
 
@@ -407,7 +448,7 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware
     /// 必然失败。而「最小化自己的前台窗口」完全不涉及那个高权限窗口，
     /// 因此**不需要管理员权限**。这是不用提权也能一键切回的关键。
     /// </summary>
-    private void SwitchBack(string trigger)
+    private void DoSwitchBack(string trigger)
     {
         _card.SetRunning();
 

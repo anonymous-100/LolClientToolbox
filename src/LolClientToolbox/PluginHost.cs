@@ -302,6 +302,8 @@ internal sealed class PluginManager
             return;
         }
 
+        PreloadSharedRuntime(pluginsRoot);
+
         foreach (var dir in Directory.GetDirectories(pluginsRoot).OrderBy(d => d, StringComparer.Ordinal))
         {
             var mfPath = Path.Combine(dir, "plugin.json");
@@ -336,6 +338,41 @@ internal sealed class PluginManager
         }
 
         _log(LogLevel.Info, "插件", $"已加载 {_plugins.Count} 个功能插件");
+    }
+
+    /// <summary>
+    /// 预载插件们共享的 WinRT 运行时（Microsoft.Windows.SDK.NET.dll / WinRT.Runtime.dll）。
+    ///
+    /// 为什么必须有：多个插件都可能带这两个 dll（各自目录一份）。它们内部注册
+    /// 进程级全局单例（ComWrappers），**加载两份时第二份初始化会直接抛
+    /// 「Attempt to update previously set global instance」**（2026-10-25 实测：
+    /// 「看视频（手动）」先加载没事，deathwatch 一调 OCR 就炸）。
+    /// 处理思路和 Contracts 一样：先找一份进默认上下文，各插件 ALC 的解析规则
+    /// 看到默认上下文里已经有了就复用那一份，永远只有一份真正初始化。
+    /// </summary>
+    private void PreloadSharedRuntime(string pluginsRoot)
+    {
+        string[] shared = { "Microsoft.Windows.SDK.NET.dll", "WinRT.Runtime.dll" };
+        foreach (var name in shared)
+        {
+            var shortName = Path.GetFileNameWithoutExtension(name);
+            if (AssemblyLoadContext.Default.Assemblies.Any(a =>
+                    string.Equals(a.GetName().Name, shortName, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            try
+            {
+                var found = Directory.GetFiles(pluginsRoot, name, SearchOption.AllDirectories)
+                                     .FirstOrDefault();
+                if (found is null) continue;
+                Assembly.LoadFrom(found);
+                _log(LogLevel.Info, "插件", $"共享运行时 {name} 已预载（默认上下文）");
+            }
+            catch (Exception ex)
+            {
+                _log(LogLevel.Warn, "插件", $"共享运行时 {name} 预载失败：{ex.Message}");
+            }
+        }
     }
 
     private void LoadOne(string dir, PluginManifest m)
@@ -399,6 +436,19 @@ internal sealed class PluginManager
     /// <summary>插件目录（右键「查看说明」从这里读 说明.md）。</summary>
     public string? PluginFolder(string pluginId) =>
         _plugins.FirstOrDefault(p => p.Manifest.Id == pluginId)?.Folder;
+
+    /// <summary>
+    /// 按接口找已加载插件提供的服务（插件间协作的唯一通道，见契约里的 IVideoSwitcher）。
+    /// 多个插件都实现了就取加载顺序里第一个；没有返回 null。
+    /// </summary>
+    public T? FindService<T>() where T : class
+    {
+        foreach (var p in _plugins)
+        {
+            if (p.Instance is T svc) return svc;
+        }
+        return null;
+    }
 
     // ---------- 事件订阅（由 IPluginHost 调用） ----------
 
@@ -508,4 +558,7 @@ internal sealed class PluginInitContext : IPluginHost
     public void ShowAuxWindow(IntPtr hwnd, int width, int height) =>
         _inner.ShowAuxWindow(hwnd, width, height);
     public T GetLegacy<T>(string key, T fallback) => _inner.GetLegacy<T>(key, fallback);
+
+    /// <summary>插件间服务发现：从已加载的插件里按接口找（Manager 持有全部插件）。</summary>
+    public T? GetService<T>() where T : class => _mgr.FindService<T>();
 }
