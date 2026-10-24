@@ -13,11 +13,14 @@ obj/
 #   dist/   发布产物（只放验证过的版本）
 #   tools/  本地调试脚本（探针、模拟按键）
 #   publish/ publish_*/  历史目录，保留忽略
+# 例外：tools/probe 是正式的测试基建（发布前必跑），要进仓库
 .dev/
 .dev*/
 dist/
 build/
-tools/
+tools/*
+!tools/probe/
+!tools/release.ps1
 publish/
 publish_*/
 

@@ -1,0 +1,2629 @@
+{
+ "activePlayer": {
+  "abilities": {
+   "E": {
+    "abilityLevel": 4,
+    "displayName": "大步驰援",
+    "id": "KSanteE",
+    "rawDescription": "GeneratedTip_Spell_KSanteE_Description",
+    "rawDisplayName": "GeneratedTip_Spell_KSanteE_DisplayName"
+   },
+   "Passive": {
+    "displayName": "血性本能",
+    "id": "KSanteP",
+    "rawDescription": "GeneratedTip_Passive_KSanteP_Description",
+    "rawDisplayName": "GeneratedTip_Passive_KSanteP_DisplayName"
+   },
+   "Q": {
+    "abilityLevel": 5,
+    "displayName": "无双陀斧",
+    "id": "KSanteQ",
+    "rawDescription": "GeneratedTip_Spell_KSanteQ_Description",
+    "rawDisplayName": "GeneratedTip_Spell_KSanteQ_DisplayName"
+   },
+   "R": {
+    "abilityLevel": 3,
+    "displayName": "傲岸雄姿",
+    "id": "KSanteR",
+    "rawDescription": "GeneratedTip_Spell_KSanteR_Description",
+    "rawDisplayName": "GeneratedTip_Spell_KSanteR_DisplayName"
+   },
+   "W": {
+    "abilityLevel": 4,
+    "displayName": "辟路先锋",
+    "id": "KSanteW",
+    "rawDescription": "GeneratedTip_Spell_KSanteW_Description",
+    "rawDisplayName": "GeneratedTip_Spell_KSanteW_DisplayName"
+   }
+  },
+  "championStats": {
+   "abilityHaste": 33.0,
+   "abilityPower": 0.0,
+   "armor": 286.77001953125,
+   "armorPenetrationFlat": 0.0,
+   "armorPenetrationPercent": 1.0,
+   "attackDamage": 114.66250610351562,
+   "attackRange": 150.0,
+   "attackSpeed": 2.1641719341278076,
+   "bonusArmorPenetrationPercent": 1.0,
+   "bonusMagicPenetrationPercent": 1.0,
+   "critChance": 0.0,
+   "critDamage": 200.0,
+   "currentHealth": 3627.9794921875,
+   "healShieldPower": 0.0,
+   "healthRegenRate": 2.877000093460083,
+   "lifeSteal": 0.0,
+   "magicLethality": 0.0,
+   "magicPenetrationFlat": 0.0,
+   "magicPenetrationPercent": 1.0,
+   "magicResist": 391.8974914550781,
+   "maxHealth": 4393.7646484375,
+   "moveSpeed": 552.2897338867188,
+   "omnivamp": 0.0,
+   "physicalLethality": 0.0,
+   "physicalVamp": 0.0,
+   "resourceMax": 1188.5,
+   "resourceRegenRate": 6.594010829925537,
+   "resourceType": "MANA",
+   "resourceValue": 1090.3309326171875,
+   "spellVamp": 0.0,
+   "tenacity": 5.0
+  },
+  "currentGold": 805.8306884765625,
+  "fullRunes": {},
+  "level": 16,
+  "riotId": "玩家1#0001",
+  "riotIdGameName": "玩家1",
+  "riotIdTagLine": "0001",
+  "summonerName": "玩家1",
+  "teamRelativeColors": true
+ },
+ "allPlayers": [
+  {
+   "championName": "复仇焰魂",
+   "isBot": false,
+   "isDead": true,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "黯炎火炬",
+     "itemID": 2503,
+     "price": 700,
+     "rawDescription": "GeneratedTip_Item_2503_Description",
+     "rawDisplayName": "Item_2503_Name",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "中娅沙漏",
+     "itemID": 3157,
+     "price": 450,
+     "rawDescription": "GeneratedTip_Item_3157_Description",
+     "rawDisplayName": "Item_3157_Name",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "暴食胫甲",
+     "itemID": 3008,
+     "price": 800,
+     "rawDescription": "GeneratedTip_Item_3008_Description",
+     "rawDisplayName": "Item_3008_Name",
+     "slot": 2
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "兰德里的折磨",
+     "itemID": 6653,
+     "price": 800,
+     "rawDescription": "GeneratedTip_Item_6653_Description",
+     "rawDisplayName": "Item_6653_Name",
+     "slot": 3
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "无用大棒",
+     "itemID": 1058,
+     "price": 1200,
+     "rawDescription": "GeneratedTip_Item_1058_Description",
+     "rawDisplayName": "Item_1058_Name",
+     "slot": 4
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "无用大棒",
+     "itemID": 1058,
+     "price": 1200,
+     "rawDescription": "GeneratedTip_Item_1058_Description",
+     "rawDisplayName": "Item_1058_Name",
+     "slot": 5
+    },
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 2,
+     "displayName": "魄罗佳肴",
+     "itemID": 220013,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_220013_Description",
+     "rawDisplayName": "Item_2052_Name",
+     "slot": 6
+    }
+   ],
+   "level": 16,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Brand",
+   "rawSkinName": "game_character_skin_displayname_Brand_21",
+   "respawnTimer": 5.187553405761719,
+   "riotId": "玩家2#0002",
+   "riotIdGameName": "玩家2",
+   "riotIdTagLine": "0002",
+   "runes": null,
+   "scores": {
+    "assists": 25,
+    "creepScore": 30,
+    "deaths": 9,
+    "kills": 13,
+    "wardScore": 0.0
+   },
+   "skinID": 21,
+   "skinName": "焰执事 布兰德",
+   "summonerName": "玩家3",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "闪现",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerFlash_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "标记",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerSnowball_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerSnowball_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "战争之影",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "守护者之刃",
+     "itemID": 3177,
+     "price": 950,
+     "rawDescription": "GeneratedTip_Item_3177_Description",
+     "rawDisplayName": "game_item_displayname_3177",
+     "slot": 0
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "贪欲九头蛇",
+     "itemID": 3074,
+     "price": 150,
+     "rawDescription": "GeneratedTip_Item_3074_Description",
+     "rawDisplayName": "Item_3074_Name",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "暴食胫甲",
+     "itemID": 3008,
+     "price": 800,
+     "rawDescription": "GeneratedTip_Item_3008_Description",
+     "rawDisplayName": "Item_3008_Name",
+     "slot": 2
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "三相之力",
+     "itemID": 3078,
+     "price": 133,
+     "rawDescription": "GeneratedTip_Item_3078_Description",
+     "rawDisplayName": "Item_3078_Name",
+     "slot": 3
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "死亡之舞",
+     "itemID": 6333,
+     "price": 275,
+     "rawDescription": "GeneratedTip_Item_6333_Description",
+     "rawDisplayName": "Item_6333_Name",
+     "slot": 4
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "长剑",
+     "itemID": 1036,
+     "price": 350,
+     "rawDescription": "GeneratedTip_Item_1036_Description",
+     "rawDisplayName": "Item_1036_Name",
+     "slot": 5
+    },
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 2,
+     "displayName": "魄罗佳肴",
+     "itemID": 220013,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_220013_Description",
+     "rawDisplayName": "Item_2052_Name",
+     "slot": 6
+    }
+   ],
+   "level": 16,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Hecarim",
+   "rawSkinName": "game_character_displayname_Hecarim",
+   "respawnTimer": 0.0,
+   "riotId": "玩家4#0003",
+   "riotIdGameName": "玩家4",
+   "riotIdTagLine": "0003",
+   "runes": null,
+   "scores": {
+    "assists": 27,
+    "creepScore": 40,
+    "deaths": 12,
+    "kills": 10,
+    "wardScore": 0.0
+   },
+   "skinID": 0,
+   "skinName": "战争之影",
+   "summonerName": "玩家5",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "闪现",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerFlash_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "标记",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerSnowball_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerSnowball_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "深渊巨口",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "黯炎火炬",
+     "itemID": 2503,
+     "price": 700,
+     "rawDescription": "GeneratedTip_Item_2503_Description",
+     "rawDisplayName": "Item_2503_Name",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "纳什之牙",
+     "itemID": 3115,
+     "price": 500,
+     "rawDescription": "GeneratedTip_Item_3115_Description",
+     "rawDisplayName": "Item_3115_Name",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "女神之泪",
+     "itemID": 3070,
+     "price": 400,
+     "rawDescription": "GeneratedTip_Item_3070_Description",
+     "rawDisplayName": "Item_3070_Name",
+     "slot": 2
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "界弓",
+     "itemID": 3302,
+     "price": 1100,
+     "rawDescription": "GeneratedTip_Item_3302_Description",
+     "rawDisplayName": "Item_3302_Name",
+     "slot": 3
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "黄昏与黎明",
+     "itemID": 2510,
+     "price": 300,
+     "rawDescription": "GeneratedTip_Item_2510_Description",
+     "rawDisplayName": "Item_2510_Name",
+     "slot": 4
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "暴食胫甲",
+     "itemID": 3008,
+     "price": 800,
+     "rawDescription": "GeneratedTip_Item_3008_Description",
+     "rawDisplayName": "Item_3008_Name",
+     "slot": 5
+    },
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 2,
+     "displayName": "魄罗佳肴",
+     "itemID": 2052,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_2052_Description",
+     "rawDisplayName": "Item_2052_Name",
+     "slot": 6
+    }
+   ],
+   "level": 16,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_KogMaw",
+   "rawSkinName": "game_character_displayname_KogMaw",
+   "respawnTimer": 0.0,
+   "riotId": "玩家6#0004",
+   "riotIdGameName": "玩家6",
+   "riotIdTagLine": "0004",
+   "runes": null,
+   "scores": {
+    "assists": 34,
+    "creepScore": 30,
+    "deaths": 10,
+    "kills": 13,
+    "wardScore": 0.0
+   },
+   "skinID": 0,
+   "skinName": "深渊巨口",
+   "summonerName": "玩家7",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "闪现",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerFlash_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "幽灵疾步",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerHaste_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerHaste_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "河流之王",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "心之钢",
+     "itemID": 3084,
+     "price": 400,
+     "rawDescription": "GeneratedTip_Item_3084_Description",
+     "rawDisplayName": "Item_3084_Name",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "狂徒铠甲",
+     "itemID": 3083,
+     "price": 500,
+     "rawDescription": "GeneratedTip_Item_3083_Description",
+     "rawDisplayName": "Item_3083_Name",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "裂隙制造者",
+     "itemID": 4633,
+     "price": 950,
+     "rawDescription": "GeneratedTip_Item_4633_Description",
+     "rawDisplayName": "Item_4633_Name",
+     "slot": 2
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "水银之靴",
+     "itemID": 3111,
+     "price": 550,
+     "rawDescription": "GeneratedTip_Item_3111_Description",
+     "rawDisplayName": "Item_3111_Name",
+     "slot": 3
+    },
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "魄罗佳肴",
+     "itemID": 220013,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_220013_Description",
+     "rawDisplayName": "Item_2052_Name",
+     "slot": 6
+    }
+   ],
+   "level": 16,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_TahmKench",
+   "rawSkinName": "game_character_skin_displayname_TahmKench_11",
+   "respawnTimer": 0.0,
+   "riotId": "玩家8#0005",
+   "riotIdGameName": "玩家8",
+   "riotIdTagLine": "0005",
+   "runes": null,
+   "scores": {
+    "assists": 30,
+    "creepScore": 10,
+    "deaths": 7,
+    "kills": 5,
+    "wardScore": 0.0
+   },
+   "skinID": 11,
+   "skinName": "秩序之舌 塔姆",
+   "summonerName": "玩家9",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "黄铜爆音器",
+     "rawDescription": "GeneratedTip_SummonerSpell_Augment_BrassBlast_ChargeUp_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_Augment_BrassBlast_ChargeUp_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "闪现",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerFlash_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "纳祖芒荣耀",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "冰脉护手",
+     "itemID": 6662,
+     "price": 800,
+     "rawDescription": "GeneratedTip_Item_6662_Description",
+     "rawDisplayName": "Item_6662_Name",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "千变者贾修",
+     "itemID": 6665,
+     "price": 650,
+     "rawDescription": "GeneratedTip_Item_6665_Description",
+     "rawDisplayName": "Item_6665_Name",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "基克的聚合",
+     "itemID": 3050,
+     "price": 700,
+     "rawDescription": "GeneratedTip_Item_3050_Description",
+     "rawDisplayName": "Item_3050_Name",
+     "slot": 2
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "自然之力",
+     "itemID": 4401,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_4401_Description",
+     "rawDisplayName": "Item_4401_Name",
+     "slot": 3
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "负极斗篷",
+     "itemID": 1057,
+     "price": 450,
+     "rawDescription": "GeneratedTip_Item_1057_Description",
+     "rawDisplayName": "Item_1057_Name",
+     "slot": 4
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "红水晶",
+     "itemID": 1028,
+     "price": 400,
+     "rawDescription": "GeneratedTip_Item_1028_Description",
+     "rawDisplayName": "Item_1028_Name",
+     "slot": 5
+    },
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 1,
+     "displayName": "魄罗佳肴",
+     "itemID": 220013,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_220013_Description",
+     "rawDisplayName": "Item_2052_Name",
+     "slot": 6
+    }
+   ],
+   "level": 16,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_KSante",
+   "rawSkinName": "game_character_displayname_KSante",
+   "respawnTimer": 0.0,
+   "riotId": "玩家1#0006",
+   "riotIdGameName": "玩家1",
+   "riotIdTagLine": "0006",
+   "runes": null,
+   "scores": {
+    "assists": 24,
+    "creepScore": 20,
+    "deaths": 9,
+    "kills": 14,
+    "wardScore": 0.0
+   },
+   "skinID": 0,
+   "skinName": "纳祖芒荣耀",
+   "summonerName": "玩家10",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "标记",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerSnowball_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerSnowball_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "闪现",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerFlash_DisplayName"
+    }
+   },
+   "team": "ORDER"
+  },
+  {
+   "championName": "曙光女神",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "心之钢",
+     "itemID": 3084,
+     "price": 400,
+     "rawDescription": "GeneratedTip_Item_3084_Description",
+     "rawDisplayName": "Item_3084_Name",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "鞋子",
+     "itemID": 1001,
+     "price": 300,
+     "rawDescription": "GeneratedTip_Item_1001_Description",
+     "rawDisplayName": "Item_1001_Name",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "无终恨意",
+     "itemID": 2502,
+     "price": 800,
+     "rawDescription": "GeneratedTip_Item_2502_Description",
+     "rawDisplayName": "Item_2502_Name",
+     "slot": 2
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "振奋盔甲",
+     "itemID": 3065,
+     "price": 650,
+     "rawDescription": "GeneratedTip_Item_3065_Description",
+     "rawDisplayName": "Item_3065_Name",
+     "slot": 3
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "巨人腰带",
+     "itemID": 1011,
+     "price": 500,
+     "rawDescription": "GeneratedTip_Item_1011_Description",
+     "rawDisplayName": "Item_1011_Name",
+     "slot": 4
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "负极斗篷",
+     "itemID": 1057,
+     "price": 450,
+     "rawDescription": "GeneratedTip_Item_1057_Description",
+     "rawDisplayName": "Item_1057_Name",
+     "slot": 5
+    },
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 2,
+     "displayName": "魄罗佳肴",
+     "itemID": 220013,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_220013_Description",
+     "rawDisplayName": "Item_2052_Name",
+     "slot": 6
+    }
+   ],
+   "level": 16,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Leona",
+   "rawSkinName": "game_character_skin_displayname_Leona_53",
+   "respawnTimer": 0.0,
+   "riotId": "玩家11#0007",
+   "riotIdGameName": "玩家11",
+   "riotIdTagLine": "0007",
+   "runes": null,
+   "scores": {
+    "assists": 26,
+    "creepScore": 0,
+    "deaths": 11,
+    "kills": 8,
+    "wardScore": 0.0
+   },
+   "skinID": 53,
+   "skinName": "至臻 幻灵狮心 蕾欧娜",
+   "summonerName": "玩家12",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "闪现",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerFlash_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "标记",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerSnowball_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerSnowball_DisplayName"
+    }
+   },
+   "team": "CHAOS"
+  },
+  {
+   "championName": "九尾妖狐",
+   "isBot": false,
+   "isDead": true,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "黯炎火炬",
+     "itemID": 2503,
+     "price": 700,
+     "rawDescription": "GeneratedTip_Item_2503_Description",
+     "rawDisplayName": "Item_2503_Name",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "兰德里的折磨",
+     "itemID": 6653,
+     "price": 800,
+     "rawDescription": "GeneratedTip_Item_6653_Description",
+     "rawDisplayName": "Item_6653_Name",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "海克斯科技发电机",
+     "itemID": 3145,
+     "price": 300,
+     "rawDescription": "GeneratedTip_Item_3145_Description",
+     "rawDisplayName": "Item_3145_Name",
+     "slot": 2
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "无用大棒",
+     "itemID": 1058,
+     "price": 1200,
+     "rawDescription": "GeneratedTip_Item_1058_Description",
+     "rawDisplayName": "Item_1058_Name",
+     "slot": 3
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "暴食胫甲",
+     "itemID": 3008,
+     "price": 800,
+     "rawDescription": "GeneratedTip_Item_3008_Description",
+     "rawDisplayName": "Item_3008_Name",
+     "slot": 5
+    },
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 2,
+     "displayName": "魄罗佳肴",
+     "itemID": 220013,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_220013_Description",
+     "rawDisplayName": "Item_2052_Name",
+     "slot": 6
+    }
+   ],
+   "level": 16,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Ahri",
+   "rawSkinName": "game_character_skin_displayname_Ahri_14",
+   "respawnTimer": 2.8816680908203125,
+   "riotId": "玩家13#0008",
+   "riotIdGameName": "玩家13",
+   "riotIdTagLine": "0008",
+   "runes": null,
+   "scores": {
+    "assists": 29,
+    "creepScore": 30,
+    "deaths": 9,
+    "kills": 5,
+    "wardScore": 0.0
+   },
+   "skinID": 14,
+   "skinName": "星之守护者 阿狸",
+   "summonerName": "玩家14",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "标记",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerSnowball_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerSnowball_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "闪现",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerFlash_DisplayName"
+    }
+   },
+   "team": "CHAOS"
+  },
+  {
+   "championName": "扭曲树精",
+   "isBot": false,
+   "isDead": false,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "心之钢",
+     "itemID": 3084,
+     "price": 400,
+     "rawDescription": "GeneratedTip_Item_3084_Description",
+     "rawDisplayName": "Item_3084_Name",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "带翼的月板甲",
+     "itemID": 3066,
+     "price": 400,
+     "rawDescription": "GeneratedTip_Item_3066_Description",
+     "rawDisplayName": "Item_3066_Name",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "负极斗篷",
+     "itemID": 1057,
+     "price": 450,
+     "rawDescription": "GeneratedTip_Item_1057_Description",
+     "rawDisplayName": "Item_1057_Name",
+     "slot": 2
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "无终恨意",
+     "itemID": 2502,
+     "price": 800,
+     "rawDescription": "GeneratedTip_Item_2502_Description",
+     "rawDisplayName": "Item_2502_Name",
+     "slot": 3
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "璀璨回响",
+     "itemID": 6664,
+     "price": 650,
+     "rawDescription": "GeneratedTip_Item_6664_Description",
+     "rawDisplayName": "Item_6664_Name",
+     "slot": 4
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "水银之靴",
+     "itemID": 3111,
+     "price": 550,
+     "rawDescription": "GeneratedTip_Item_3111_Description",
+     "rawDisplayName": "Item_3111_Name",
+     "slot": 5
+    },
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 2,
+     "displayName": "魄罗佳肴",
+     "itemID": 220013,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_220013_Description",
+     "rawDisplayName": "Item_2052_Name",
+     "slot": 6
+    }
+   ],
+   "level": 16,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Maokai",
+   "rawSkinName": "game_character_skin_displayname_Maokai_24",
+   "respawnTimer": 0.0,
+   "riotId": "玩家15#0009",
+   "riotIdGameName": "玩家15",
+   "riotIdTagLine": "0009",
+   "runes": null,
+   "scores": {
+    "assists": 26,
+    "creepScore": 10,
+    "deaths": 11,
+    "kills": 4,
+    "wardScore": 0.0
+   },
+   "skinID": 24,
+   "skinName": "宇航员 茂凯",
+   "summonerName": "玩家16",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "标记",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerSnowball_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerSnowball_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "闪现",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerFlash_DisplayName"
+    }
+   },
+   "team": "CHAOS"
+  },
+  {
+   "championName": "铁铠冥魂",
+   "isBot": false,
+   "isDead": true,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "荆棘之甲",
+     "itemID": 3075,
+     "price": 450,
+     "rawDescription": "GeneratedTip_Item_3075_Description",
+     "rawDisplayName": "Item_3075_Name",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "无终恨意",
+     "itemID": 2502,
+     "price": 800,
+     "rawDescription": "GeneratedTip_Item_2502_Description",
+     "rawDisplayName": "Item_2502_Name",
+     "slot": 1
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "锁子甲",
+     "itemID": 1031,
+     "price": 500,
+     "rawDescription": "GeneratedTip_Item_1031_Description",
+     "rawDisplayName": "Item_1031_Name",
+     "slot": 2
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "心之钢",
+     "itemID": 3084,
+     "price": 400,
+     "rawDescription": "GeneratedTip_Item_3084_Description",
+     "rawDisplayName": "Item_3084_Name",
+     "slot": 3
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "锁子甲",
+     "itemID": 1031,
+     "price": 500,
+     "rawDescription": "GeneratedTip_Item_1031_Description",
+     "rawDisplayName": "Item_1031_Name",
+     "slot": 4
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "锁子甲",
+     "itemID": 1031,
+     "price": 500,
+     "rawDescription": "GeneratedTip_Item_1031_Description",
+     "rawDisplayName": "Item_1031_Name",
+     "slot": 5
+    }
+   ],
+   "level": 15,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Mordekaiser",
+   "rawSkinName": "game_character_skin_displayname_Mordekaiser_13",
+   "respawnTimer": 31.628448486328125,
+   "riotId": "玩家17#0010",
+   "riotIdGameName": "玩家17",
+   "riotIdTagLine": "0010",
+   "runes": null,
+   "scores": {
+    "assists": 23,
+    "creepScore": 20,
+    "deaths": 14,
+    "kills": 14,
+    "wardScore": 0.0
+   },
+   "skinID": 13,
+   "skinName": "源计划：超体 莫德凯撒",
+   "summonerName": "玩家18",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "闪现",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerFlash_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "标记",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerSnowball_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerSnowball_DisplayName"
+    }
+   },
+   "team": "CHAOS"
+  },
+  {
+   "championName": "符文法师",
+   "isBot": false,
+   "isDead": true,
+   "items": [
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "时光之杖",
+     "itemID": 6657,
+     "price": 450,
+     "rawDescription": "GeneratedTip_Item_6657_Description",
+     "rawDisplayName": "Item_6657_Name",
+     "slot": 0
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "炽天使之拥",
+     "itemID": 3040,
+     "price": 2900,
+     "rawDescription": "GeneratedTip_Item_3040_Description",
+     "rawDisplayName": "Item_3040_Name",
+     "slot": 1
+    },
+    {
+     "canUse": true,
+     "consumable": false,
+     "count": 1,
+     "displayName": "实现器",
+     "itemID": 2522,
+     "price": 750,
+     "rawDescription": "GeneratedTip_Item_2522_Description",
+     "rawDisplayName": "Item_2522_Name",
+     "slot": 2
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "轻灵之靴",
+     "itemID": 3009,
+     "price": 700,
+     "rawDescription": "GeneratedTip_Item_3009_Description",
+     "rawDisplayName": "Item_3009_Name",
+     "slot": 3
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "恶魔法典",
+     "itemID": 3108,
+     "price": 200,
+     "rawDescription": "GeneratedTip_Item_3108_Description",
+     "rawDisplayName": "Item_3108_Name",
+     "slot": 4
+    },
+    {
+     "canUse": false,
+     "consumable": false,
+     "count": 1,
+     "displayName": "灵巧披风",
+     "itemID": 1018,
+     "price": 600,
+     "rawDescription": "GeneratedTip_Item_1018_Description",
+     "rawDisplayName": "Item_1018_Name",
+     "slot": 5
+    },
+    {
+     "canUse": true,
+     "consumable": true,
+     "count": 2,
+     "displayName": "魄罗佳肴",
+     "itemID": 220013,
+     "price": 0,
+     "rawDescription": "GeneratedTip_Item_220013_Description",
+     "rawDisplayName": "Item_2052_Name",
+     "slot": 6
+    }
+   ],
+   "level": 17,
+   "position": "NONE",
+   "rawChampionName": "game_character_displayname_Ryze",
+   "rawSkinName": "game_character_skin_displayname_Ryze_8",
+   "respawnTimer": 7.93879508972168,
+   "riotId": "玩家19#0011",
+   "riotIdGameName": "玩家19",
+   "riotIdTagLine": "0011",
+   "runes": null,
+   "scores": {
+    "assists": 17,
+    "creepScore": 50,
+    "deaths": 10,
+    "kills": 16,
+    "wardScore": 0.0
+   },
+   "skinID": 8,
+   "skinName": "海贼 瑞兹",
+   "summonerName": "玩家20",
+   "summonerSpells": {
+    "summonerSpellOne": {
+     "displayName": "幽灵疾步",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerHaste_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerHaste_DisplayName"
+    },
+    "summonerSpellTwo": {
+     "displayName": "闪现",
+     "rawDescription": "GeneratedTip_SummonerSpell_SummonerFlash_Description",
+     "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerFlash_DisplayName"
+    }
+   },
+   "team": "CHAOS"
+  }
+ ],
+ "events": {
+  "Events": [
+   {
+    "EventID": 0,
+    "EventName": "GameStart",
+    "EventTime": 0.021781500428915024
+   },
+   {
+    "Assisters": [
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 1,
+    "EventName": "ChampionKill",
+    "EventTime": 43.526756286621094,
+    "KillerName": "AriannaHeartbell",
+    "VictimName": "要是不相识多好"
+   },
+   {
+    "EventID": 2,
+    "EventName": "FirstBlood",
+    "EventTime": 43.526756286621094,
+    "Recipient": "AriannaHeartbell"
+   },
+   {
+    "Assisters": [
+     "时崎狂三",
+     "要是不相识多好"
+    ],
+    "EventID": 3,
+    "EventName": "ChampionKill",
+    "EventTime": 45.82561492919922,
+    "KillerName": "Unconscious丶",
+    "VictimName": "AriannaHeartbell"
+   },
+   {
+    "EventID": 4,
+    "EventName": "MinionsSpawning",
+    "EventTime": 50.034889221191406
+   },
+   {
+    "Assisters": [
+     "AriannaHeartbell",
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 5,
+    "EventName": "ChampionKill",
+    "EventTime": 68.23379516601562,
+    "KillerName": "taskkill",
+    "VictimName": "Unconscious丶"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx",
+     "时崎狂三",
+     "妇女能顶半边天"
+    ],
+    "EventID": 6,
+    "EventName": "ChampionKill",
+    "EventTime": 68.63477325439453,
+    "KillerName": "要是不相识多好",
+    "VictimName": "刮痧老师傅"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx",
+     "时崎狂三",
+     "妇女能顶半边天"
+    ],
+    "EventID": 7,
+    "EventName": "ChampionKill",
+    "EventTime": 72.08035278320312,
+    "KillerName": "要是不相识多好",
+    "VictimName": "taskkill"
+   },
+   {
+    "EventID": 8,
+    "EventName": "Multikill",
+    "EventTime": 72.08035278320312,
+    "KillStreak": 2,
+    "KillerName": "要是不相识多好"
+   },
+   {
+    "Assisters": [
+     "师B的世界你不知",
+     "刮痧老师傅",
+     "taskkill"
+    ],
+    "EventID": 9,
+    "EventName": "ChampionKill",
+    "EventTime": 77.95685577392578,
+    "KillerName": "AriannaHeartbell",
+    "VictimName": "要是不相识多好"
+   },
+   {
+    "Assisters": [
+     "师B的世界你不知",
+     "taskkill"
+    ],
+    "EventID": 10,
+    "EventName": "ChampionKill",
+    "EventTime": 81.49774169921875,
+    "KillerName": "AriannaHeartbell",
+    "VictimName": "时崎狂三"
+   },
+   {
+    "EventID": 11,
+    "EventName": "Multikill",
+    "EventTime": 81.49774169921875,
+    "KillStreak": 2,
+    "KillerName": "AriannaHeartbell"
+   },
+   {
+    "Assisters": [
+     "AriannaHeartbell",
+     "师B的世界你不知",
+     "taskkill"
+    ],
+    "EventID": 12,
+    "EventName": "ChampionKill",
+    "EventTime": 83.2959976196289,
+    "KillerName": "兔子也fengkuang",
+    "VictimName": "RemiliaScarletx"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx",
+     "时崎狂三",
+     "要是不相识多好"
+    ],
+    "EventID": 13,
+    "EventName": "ChampionKill",
+    "EventTime": 87.3783187866211,
+    "KillerName": "妇女能顶半边天",
+    "VictimName": "AriannaHeartbell"
+   },
+   {
+    "Assisters": [
+     "AriannaHeartbell",
+     "师B的世界你不知"
+    ],
+    "EventID": 14,
+    "EventName": "ChampionKill",
+    "EventTime": 102.80321502685547,
+    "KillerName": "兔子也fengkuang",
+    "VictimName": "妇女能顶半边天"
+   },
+   {
+    "Assisters": [
+     "妇女能顶半边天"
+    ],
+    "EventID": 15,
+    "EventName": "ChampionKill",
+    "EventTime": 117.06610107421875,
+    "KillerName": "Unconscious丶",
+    "VictimName": "师B的世界你不知"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "AriannaHeartbell",
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 16,
+    "EventName": "ChampionKill",
+    "EventTime": 117.76746368408203,
+    "KillerName": "taskkill",
+    "VictimName": "Unconscious丶"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "刮痧老师傅",
+     "taskkill"
+    ],
+    "EventID": 17,
+    "EventName": "ChampionKill",
+    "EventTime": 121.12303161621094,
+    "KillerName": "师B的世界你不知",
+    "VictimName": "要是不相识多好"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx",
+     "要是不相识多好"
+    ],
+    "EventID": 18,
+    "EventName": "ChampionKill",
+    "EventTime": 122.92768859863281,
+    "KillerName": "妇女能顶半边天",
+    "VictimName": "刮痧老师傅"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "taskkill"
+    ],
+    "EventID": 19,
+    "EventName": "ChampionKill",
+    "EventTime": 129.7617645263672,
+    "KillerName": "AriannaHeartbell",
+    "VictimName": "时崎狂三"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx",
+     "时崎狂三",
+     "要是不相识多好"
+    ],
+    "EventID": 20,
+    "EventName": "ChampionKill",
+    "EventTime": 134.61090087890625,
+    "KillerName": "妇女能顶半边天",
+    "VictimName": "AriannaHeartbell"
+   },
+   {
+    "Assisters": [
+     "RemiliaScarletx",
+     "妇女能顶半边天"
+    ],
+    "EventID": 21,
+    "EventName": "ChampionKill",
+    "EventTime": 153.8247833251953,
+    "KillerName": "要是不相识多好",
+    "VictimName": "taskkill"
+   },
+   {
+    "Assisters": [
+     "要是不相识多好"
+    ],
+    "EventID": 22,
+    "EventName": "ChampionKill",
+    "EventTime": 155.86019897460938,
+    "KillerName": "Unconscious丶",
+    "VictimName": "师B的世界你不知"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "taskkill"
+    ],
+    "EventID": 23,
+    "EventName": "ChampionKill",
+    "EventTime": 184.24978637695312,
+    "KillerName": "师B的世界你不知",
+    "VictimName": "妇女能顶半边天"
+   },
+   {
+    "Assisters": [
+     "RemiliaScarletx",
+     "时崎狂三"
+    ],
+    "EventID": 24,
+    "EventName": "ChampionKill",
+    "EventTime": 208.1678009033203,
+    "KillerName": "要是不相识多好",
+    "VictimName": "师B的世界你不知"
+   },
+   {
+    "Assisters": [
+     "AriannaHeartbell",
+     "刮痧老师傅",
+     "taskkill"
+    ],
+    "EventID": 25,
+    "EventName": "ChampionKill",
+    "EventTime": 208.9024658203125,
+    "KillerName": "兔子也fengkuang",
+    "VictimName": "时崎狂三"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 26,
+    "EventName": "ChampionKill",
+    "EventTime": 212.2499542236328,
+    "KillerName": "AriannaHeartbell",
+    "VictimName": "Unconscious丶"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "师B的世界你不知"
+    ],
+    "EventID": 27,
+    "EventName": "ChampionKill",
+    "EventTime": 212.2499542236328,
+    "KillerName": "AriannaHeartbell",
+    "VictimName": "RemiliaScarletx"
+   },
+   {
+    "EventID": 28,
+    "EventName": "Multikill",
+    "EventTime": 212.2499542236328,
+    "KillStreak": 2,
+    "KillerName": "AriannaHeartbell"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx",
+     "时崎狂三",
+     "要是不相识多好"
+    ],
+    "EventID": 29,
+    "EventName": "ChampionKill",
+    "EventTime": 212.6959686279297,
+    "KillerName": "妇女能顶半边天",
+    "VictimName": "AriannaHeartbell"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "AriannaHeartbell",
+     "师B的世界你不知",
+     "taskkill"
+    ],
+    "EventID": 30,
+    "EventName": "ChampionKill",
+    "EventTime": 213.8837432861328,
+    "KillerName": "刮痧老师傅",
+    "VictimName": "要是不相识多好"
+   },
+   {
+    "Assisters": [
+     "刮痧老师傅",
+     "taskkill"
+    ],
+    "EventID": 31,
+    "EventName": "ChampionKill",
+    "EventTime": 233.40090942382812,
+    "KillerName": "兔子也fengkuang",
+    "VictimName": "妇女能顶半边天"
+   },
+   {
+    "Assisters": [
+     "妇女能顶半边天"
+    ],
+    "EventID": 32,
+    "EventName": "ChampionKill",
+    "EventTime": 233.9945831298828,
+    "KillerName": "时崎狂三",
+    "VictimName": "兔子也fengkuang"
+   },
+   {
+    "Assisters": [
+     "RemiliaScarletx",
+     "时崎狂三",
+     "妇女能顶半边天"
+    ],
+    "EventID": 33,
+    "EventName": "ChampionKill",
+    "EventTime": 237.37686157226562,
+    "KillerName": "Unconscious丶",
+    "VictimName": "taskkill"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "时崎狂三",
+     "要是不相识多好"
+    ],
+    "EventID": 34,
+    "EventName": "ChampionKill",
+    "EventTime": 247.0346221923828,
+    "KillerName": "RemiliaScarletx",
+    "VictimName": "AriannaHeartbell"
+   },
+   {
+    "Assisters": [
+     "RemiliaScarletx",
+     "时崎狂三"
+    ],
+    "EventID": 35,
+    "EventName": "ChampionKill",
+    "EventTime": 252.87953186035156,
+    "KillerName": "Unconscious丶",
+    "VictimName": "师B的世界你不知"
+   },
+   {
+    "Assisters": [
+     "RemiliaScarletx",
+     "时崎狂三",
+     "要是不相识多好"
+    ],
+    "EventID": 36,
+    "EventName": "ChampionKill",
+    "EventTime": 258.9880676269531,
+    "KillerName": "Unconscious丶",
+    "VictimName": "刮痧老师傅"
+   },
+   {
+    "EventID": 37,
+    "EventName": "Multikill",
+    "EventTime": 258.9880676269531,
+    "KillStreak": 2,
+    "KillerName": "Unconscious丶"
+   },
+   {
+    "Assisters": [
+     "AriannaHeartbell",
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 38,
+    "EventName": "ChampionKill",
+    "EventTime": 263.4012756347656,
+    "KillerName": "taskkill",
+    "VictimName": "时崎狂三"
+   },
+   {
+    "Assisters": [
+     "师B的世界你不知",
+     "刮痧老师傅",
+     "taskkill"
+    ],
+    "EventID": 39,
+    "EventName": "ChampionKill",
+    "EventTime": 267.89013671875,
+    "KillerName": "兔子也fengkuang",
+    "VictimName": "Unconscious丶"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx",
+     "时崎狂三",
+     "要是不相识多好"
+    ],
+    "EventID": 40,
+    "EventName": "ChampionKill",
+    "EventTime": 271.7900390625,
+    "KillerName": "妇女能顶半边天",
+    "VictimName": "taskkill"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "taskkill"
+    ],
+    "EventID": 41,
+    "EventName": "ChampionKill",
+    "EventTime": 283.8795471191406,
+    "KillerName": "师B的世界你不知",
+    "VictimName": "RemiliaScarletx"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "taskkill"
+    ],
+    "EventID": 42,
+    "EventName": "ChampionKill",
+    "EventTime": 287.66033935546875,
+    "KillerName": "AriannaHeartbell",
+    "VictimName": "要是不相识多好"
+   },
+   {
+    "Assisters": [
+     "RemiliaScarletx",
+     "时崎狂三",
+     "要是不相识多好"
+    ],
+    "EventID": 43,
+    "EventName": "ChampionKill",
+    "EventTime": 291.59912109375,
+    "KillerName": "妇女能顶半边天",
+    "VictimName": "AriannaHeartbell"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "AriannaHeartbell",
+     "刮痧老师傅"
+    ],
+    "EventID": 44,
+    "EventName": "ChampionKill",
+    "EventTime": 295.5123596191406,
+    "KillerName": "师B的世界你不知",
+    "VictimName": "妇女能顶半边天"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "师B的世界你不知",
+     "taskkill"
+    ],
+    "EventID": 45,
+    "EventName": "ChampionKill",
+    "EventTime": 306.7708740234375,
+    "KillerName": "刮痧老师傅",
+    "VictimName": "Unconscious丶"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "时崎狂三",
+     "妇女能顶半边天"
+    ],
+    "EventID": 46,
+    "EventName": "ChampionKill",
+    "EventTime": 313.5321044921875,
+    "KillerName": "要是不相识多好",
+    "VictimName": "师B的世界你不知"
+   },
+   {
+    "Assisters": [
+     "要是不相识多好"
+    ],
+    "EventID": 47,
+    "EventName": "ChampionKill",
+    "EventTime": 319.5667724609375,
+    "KillerName": "时崎狂三",
+    "VictimName": "兔子也fengkuang"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "刮痧老师傅",
+     "taskkill"
+    ],
+    "EventID": 48,
+    "EventName": "ChampionKill",
+    "EventTime": 321.9658203125,
+    "KillerName": "师B的世界你不知",
+    "VictimName": "时崎狂三"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "AriannaHeartbell",
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 49,
+    "EventName": "ChampionKill",
+    "EventTime": 325.7476501464844,
+    "KillerName": "taskkill",
+    "VictimName": "要是不相识多好"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx",
+     "要是不相识多好"
+    ],
+    "EventID": 50,
+    "EventName": "ChampionKill",
+    "EventTime": 338.6732482910156,
+    "KillerName": "妇女能顶半边天",
+    "VictimName": "刮痧老师傅"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶"
+    ],
+    "EventID": 51,
+    "EventName": "ChampionKill",
+    "EventTime": 356.3547668457031,
+    "KillerName": "RemiliaScarletx",
+    "VictimName": "taskkill"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx",
+     "时崎狂三",
+     "妇女能顶半边天"
+    ],
+    "EventID": 52,
+    "EventName": "ChampionKill",
+    "EventTime": 358.7180480957031,
+    "KillerName": "要是不相识多好",
+    "VictimName": "AriannaHeartbell"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "时崎狂三",
+     "要是不相识多好"
+    ],
+    "EventID": 53,
+    "EventName": "ChampionKill",
+    "EventTime": 361.3299255371094,
+    "KillerName": "妇女能顶半边天",
+    "VictimName": "兔子也fengkuang"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "AriannaHeartbell",
+     "taskkill"
+    ],
+    "EventID": 54,
+    "EventName": "ChampionKill",
+    "EventTime": 361.70538330078125,
+    "KillerName": "师B的世界你不知",
+    "VictimName": "Unconscious丶"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "AriannaHeartbell"
+    ],
+    "EventID": 55,
+    "EventName": "ChampionKill",
+    "EventTime": 376.1278076171875,
+    "KillerName": "师B的世界你不知",
+    "VictimName": "RemiliaScarletx"
+   },
+   {
+    "Assisters": [
+     "RemiliaScarletx"
+    ],
+    "EventID": 56,
+    "EventName": "ChampionKill",
+    "EventTime": 379.2055358886719,
+    "KillerName": "要是不相识多好",
+    "VictimName": "师B的世界你不知"
+   },
+   {
+    "Assisters": [
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 57,
+    "EventName": "ChampionKill",
+    "EventTime": 386.8218078613281,
+    "KillerName": "taskkill",
+    "VictimName": "时崎狂三"
+   },
+   {
+    "Assisters": [
+     "师B的世界你不知",
+     "taskkill"
+    ],
+    "EventID": 58,
+    "EventName": "ChampionKill",
+    "EventTime": 391.0290832519531,
+    "KillerName": "AriannaHeartbell",
+    "VictimName": "妇女能顶半边天"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "AriannaHeartbell",
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 59,
+    "EventName": "ChampionKill",
+    "EventTime": 391.2652587890625,
+    "KillerName": "taskkill",
+    "VictimName": "要是不相识多好"
+   },
+   {
+    "EventID": 60,
+    "EventName": "Multikill",
+    "EventTime": 391.2652587890625,
+    "KillStreak": 2,
+    "KillerName": "taskkill"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "刮痧老师傅"
+    ],
+    "EventID": 61,
+    "EventName": "TurretKilled",
+    "EventTime": 409.0740051269531,
+    "KillerName": "taskkill",
+    "TurretKilled": "Turret_TChaos_L1_P3_671196429_0"
+   },
+   {
+    "EventID": 62,
+    "EventName": "FirstBrick",
+    "EventTime": 409.0740051269531,
+    "KillerName": "taskkill"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx",
+     "时崎狂三",
+     "妇女能顶半边天"
+    ],
+    "EventID": 63,
+    "EventName": "ChampionKill",
+    "EventTime": 420.6929016113281,
+    "KillerName": "要是不相识多好",
+    "VictimName": "兔子也fengkuang"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx",
+     "时崎狂三",
+     "妇女能顶半边天"
+    ],
+    "EventID": 64,
+    "EventName": "ChampionKill",
+    "EventTime": 422.70062255859375,
+    "KillerName": "要是不相识多好",
+    "VictimName": "AriannaHeartbell"
+   },
+   {
+    "EventID": 65,
+    "EventName": "Multikill",
+    "EventTime": 422.70062255859375,
+    "KillStreak": 2,
+    "KillerName": "要是不相识多好"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "AriannaHeartbell",
+     "taskkill"
+    ],
+    "EventID": 66,
+    "EventName": "ChampionKill",
+    "EventTime": 423.9750671386719,
+    "KillerName": "刮痧老师傅",
+    "VictimName": "RemiliaScarletx"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "AriannaHeartbell",
+     "师B的世界你不知"
+    ],
+    "EventID": 67,
+    "EventName": "ChampionKill",
+    "EventTime": 424.09930419921875,
+    "KillerName": "taskkill",
+    "VictimName": "Unconscious丶"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx",
+     "要是不相识多好",
+     "妇女能顶半边天"
+    ],
+    "EventID": 68,
+    "EventName": "ChampionKill",
+    "EventTime": 425.3066711425781,
+    "KillerName": "时崎狂三",
+    "VictimName": "刮痧老师傅"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "AriannaHeartbell",
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 69,
+    "EventName": "ChampionKill",
+    "EventTime": 428.1408386230469,
+    "KillerName": "taskkill",
+    "VictimName": "时崎狂三"
+   },
+   {
+    "EventID": 70,
+    "EventName": "Multikill",
+    "EventTime": 428.1408386230469,
+    "KillStreak": 2,
+    "KillerName": "taskkill"
+   },
+   {
+    "Assisters": [],
+    "EventID": 71,
+    "EventName": "ChampionKill",
+    "EventTime": 435.95458984375,
+    "KillerName": "taskkill",
+    "VictimName": "妇女能顶半边天"
+   },
+   {
+    "EventID": 72,
+    "EventName": "Multikill",
+    "EventTime": 435.95458984375,
+    "KillStreak": 3,
+    "KillerName": "taskkill"
+   },
+   {
+    "Assisters": [],
+    "EventID": 73,
+    "EventName": "ChampionKill",
+    "EventTime": 440.1295471191406,
+    "KillerName": "要是不相识多好",
+    "VictimName": "师B的世界你不知"
+   },
+   {
+    "Assisters": [
+     "时崎狂三",
+     "妇女能顶半边天"
+    ],
+    "EventID": 74,
+    "EventName": "ChampionKill",
+    "EventTime": 444.0196228027344,
+    "KillerName": "要是不相识多好",
+    "VictimName": "taskkill"
+   },
+   {
+    "EventID": 75,
+    "EventName": "Multikill",
+    "EventTime": 444.0196228027344,
+    "KillStreak": 2,
+    "KillerName": "要是不相识多好"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "刮痧老师傅",
+     "taskkill"
+    ],
+    "EventID": 76,
+    "EventName": "ChampionKill",
+    "EventTime": 444.28076171875,
+    "KillerName": "师B的世界你不知",
+    "VictimName": "要是不相识多好"
+   },
+   {
+    "Acer": "师B的世界你不知",
+    "AcingTeam": "ORDER",
+    "EventID": 77,
+    "EventName": "Ace",
+    "EventTime": 444.28076171875
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "妇女能顶半边天"
+    ],
+    "EventID": 78,
+    "EventName": "ChampionKill",
+    "EventTime": 540.7957153320312,
+    "KillerName": "RemiliaScarletx",
+    "VictimName": "兔子也fengkuang"
+   },
+   {
+    "Assisters": [
+     "AriannaHeartbell",
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 79,
+    "EventName": "ChampionKill",
+    "EventTime": 545.7398071289062,
+    "KillerName": "taskkill",
+    "VictimName": "要是不相识多好"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "AriannaHeartbell",
+     "taskkill"
+    ],
+    "EventID": 80,
+    "EventName": "ChampionKill",
+    "EventTime": 546.5849609375,
+    "KillerName": "师B的世界你不知",
+    "VictimName": "Unconscious丶"
+   },
+   {
+    "Assisters": [
+     "师B的世界你不知"
+    ],
+    "EventID": 81,
+    "EventName": "ChampionKill",
+    "EventTime": 546.6614990234375,
+    "KillerName": "兔子也fengkuang",
+    "VictimName": "妇女能顶半边天"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "师B的世界你不知"
+    ],
+    "EventID": 82,
+    "EventName": "ChampionKill",
+    "EventTime": 547.6759643554688,
+    "KillerName": "AriannaHeartbell",
+    "VictimName": "RemiliaScarletx"
+   },
+   {
+    "Assisters": [
+     "AriannaHeartbell",
+     "刮痧老师傅",
+     "taskkill"
+    ],
+    "EventID": 83,
+    "EventName": "ChampionKill",
+    "EventTime": 550.2562866210938,
+    "KillerName": "师B的世界你不知",
+    "VictimName": "时崎狂三"
+   },
+   {
+    "EventID": 84,
+    "EventName": "Multikill",
+    "EventTime": 550.2562866210938,
+    "KillStreak": 2,
+    "KillerName": "师B的世界你不知"
+   },
+   {
+    "Acer": "师B的世界你不知",
+    "AcingTeam": "ORDER",
+    "EventID": 85,
+    "EventName": "Ace",
+    "EventTime": 550.2562866210938
+   },
+   {
+    "Assisters": [
+     "师B的世界你不知",
+     "刮痧老师傅",
+     "taskkill"
+    ],
+    "EventID": 86,
+    "EventName": "TurretKilled",
+    "EventTime": 562.8163452148438,
+    "KillerName": "AriannaHeartbell",
+    "TurretKilled": "Turret_TChaos_L1_P2_620863572_0"
+   },
+   {
+    "Assisters": [
+     "AriannaHeartbell",
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 87,
+    "EventName": "InhibKilled",
+    "EventTime": 567.5924072265625,
+    "InhibKilled": "Inhib_TChaos_L1_P1_2432143522_0",
+    "KillerName": "taskkill"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "要是不相识多好"
+    ],
+    "EventID": 88,
+    "EventName": "ChampionKill",
+    "EventTime": 582.2105712890625,
+    "KillerName": "妇女能顶半边天",
+    "VictimName": "师B的世界你不知"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx",
+     "妇女能顶半边天"
+    ],
+    "EventID": 89,
+    "EventName": "ChampionKill",
+    "EventTime": 584.0772094726562,
+    "KillerName": "要是不相识多好",
+    "VictimName": "taskkill"
+   },
+   {
+    "Assisters": [
+     "RemiliaScarletx",
+     "时崎狂三",
+     "要是不相识多好"
+    ],
+    "EventID": 90,
+    "EventName": "ChampionKill",
+    "EventTime": 585.8734741210938,
+    "KillerName": "Unconscious丶",
+    "VictimName": "AriannaHeartbell"
+   },
+   {
+    "Assisters": [
+     "AriannaHeartbell",
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 91,
+    "EventName": "ChampionKill",
+    "EventTime": 596.396240234375,
+    "KillerName": "兔子也fengkuang",
+    "VictimName": "要是不相识多好"
+   },
+   {
+    "Assisters": [
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 92,
+    "EventName": "ChampionKill",
+    "EventTime": 599.3358764648438,
+    "KillerName": "兔子也fengkuang",
+    "VictimName": "RemiliaScarletx"
+   },
+   {
+    "EventID": 93,
+    "EventName": "Multikill",
+    "EventTime": 599.3358764648438,
+    "KillStreak": 2,
+    "KillerName": "兔子也fengkuang"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx",
+     "时崎狂三",
+     "要是不相识多好"
+    ],
+    "EventID": 94,
+    "EventName": "ChampionKill",
+    "EventTime": 600.9362182617188,
+    "KillerName": "妇女能顶半边天",
+    "VictimName": "刮痧老师傅"
+   },
+   {
+    "Assisters": [
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 95,
+    "EventName": "ChampionKill",
+    "EventTime": 605.776611328125,
+    "KillerName": "兔子也fengkuang",
+    "VictimName": "Unconscious丶"
+   },
+   {
+    "EventID": 96,
+    "EventName": "Multikill",
+    "EventTime": 605.776611328125,
+    "KillStreak": 3,
+    "KillerName": "兔子也fengkuang"
+   },
+   {
+    "Assisters": [
+     "刮痧老师傅"
+    ],
+    "EventID": 97,
+    "EventName": "ChampionKill",
+    "EventTime": 606.3497924804688,
+    "KillerName": "兔子也fengkuang",
+    "VictimName": "妇女能顶半边天"
+   },
+   {
+    "EventID": 98,
+    "EventName": "Multikill",
+    "EventTime": 606.3497924804688,
+    "KillStreak": 4,
+    "KillerName": "兔子也fengkuang"
+   },
+   {
+    "Assisters": [],
+    "EventID": 99,
+    "EventName": "ChampionKill",
+    "EventTime": 617.2485961914062,
+    "KillerName": "兔子也fengkuang",
+    "VictimName": "时崎狂三"
+   },
+   {
+    "EventID": 100,
+    "EventName": "Multikill",
+    "EventTime": 617.2485961914062,
+    "KillStreak": 5,
+    "KillerName": "兔子也fengkuang"
+   },
+   {
+    "Acer": "兔子也fengkuang",
+    "AcingTeam": "ORDER",
+    "EventID": 101,
+    "EventName": "Ace",
+    "EventTime": 617.2485961914062
+   },
+   {
+    "Assisters": [
+     "时崎狂三",
+     "要是不相识多好"
+    ],
+    "EventID": 102,
+    "EventName": "ChampionKill",
+    "EventTime": 636.3218994140625,
+    "KillerName": "RemiliaScarletx",
+    "VictimName": "兔子也fengkuang"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "师B的世界你不知",
+     "taskkill"
+    ],
+    "EventID": 103,
+    "EventName": "ChampionKill",
+    "EventTime": 636.7200317382812,
+    "KillerName": "AriannaHeartbell",
+    "VictimName": "要是不相识多好"
+   },
+   {
+    "Assisters": [
+     "AriannaHeartbell",
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 104,
+    "EventName": "ChampionKill",
+    "EventTime": 650.4937133789062,
+    "KillerName": "taskkill",
+    "VictimName": "Unconscious丶"
+   },
+   {
+    "Assisters": [
+     "AriannaHeartbell",
+     "taskkill"
+    ],
+    "EventID": 105,
+    "EventName": "ChampionKill",
+    "EventTime": 653.1265258789062,
+    "KillerName": "师B的世界你不知",
+    "VictimName": "RemiliaScarletx"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "要是不相识多好"
+    ],
+    "EventID": 106,
+    "EventName": "ChampionKill",
+    "EventTime": 653.423095703125,
+    "KillerName": "妇女能顶半边天",
+    "VictimName": "AriannaHeartbell"
+   },
+   {
+    "Assisters": [
+     "AriannaHeartbell",
+     "师B的世界你不知",
+     "taskkill"
+    ],
+    "EventID": 107,
+    "EventName": "ChampionKill",
+    "EventTime": 659.0388793945312,
+    "KillerName": "刮痧老师傅",
+    "VictimName": "妇女能顶半边天"
+   },
+   {
+    "Assisters": [
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 108,
+    "EventName": "ChampionKill",
+    "EventTime": 666.78564453125,
+    "KillerName": "taskkill",
+    "VictimName": "时崎狂三"
+   },
+   {
+    "Assisters": [],
+    "EventID": 109,
+    "EventName": "TurretKilled",
+    "EventTime": 669.817626953125,
+    "KillerName": "师B的世界你不知",
+    "TurretKilled": "Turret_TChaos_L1_P4_587308334_0"
+   },
+   {
+    "Assisters": [
+     "时崎狂三"
+    ],
+    "EventID": 110,
+    "EventName": "ChampionKill",
+    "EventTime": 675.7022094726562,
+    "KillerName": "要是不相识多好",
+    "VictimName": "师B的世界你不知"
+   },
+   {
+    "Assisters": [
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 111,
+    "EventName": "ChampionKill",
+    "EventTime": 684.8242797851562,
+    "KillerName": "taskkill",
+    "VictimName": "要是不相识多好"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx"
+    ],
+    "EventID": 112,
+    "EventName": "ChampionKill",
+    "EventTime": 697.4506225585938,
+    "KillerName": "妇女能顶半边天",
+    "VictimName": "兔子也fengkuang"
+   },
+   {
+    "Assisters": [],
+    "EventID": 113,
+    "EventName": "TurretKilled",
+    "EventTime": 700.6246337890625,
+    "KillerName": "taskkill",
+    "TurretKilled": "Turret_TChaos_L1_P5_637641191_0"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx",
+     "要是不相识多好"
+    ],
+    "EventID": 114,
+    "EventName": "ChampionKill",
+    "EventTime": 702.6691284179688,
+    "KillerName": "妇女能顶半边天",
+    "VictimName": "taskkill"
+   },
+   {
+    "EventID": 115,
+    "EventName": "Multikill",
+    "EventTime": 702.6691284179688,
+    "KillStreak": 2,
+    "KillerName": "妇女能顶半边天"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx",
+     "时崎狂三",
+     "要是不相识多好"
+    ],
+    "EventID": 116,
+    "EventName": "ChampionKill",
+    "EventTime": 734.6923217773438,
+    "KillerName": "妇女能顶半边天",
+    "VictimName": "AriannaHeartbell"
+   },
+   {
+    "Assisters": [
+     "RemiliaScarletx"
+    ],
+    "EventID": 117,
+    "EventName": "ChampionKill",
+    "EventTime": 736.7024536132812,
+    "KillerName": "要是不相识多好",
+    "VictimName": "师B的世界你不知"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "时崎狂三",
+     "妇女能顶半边天"
+    ],
+    "EventID": 118,
+    "EventName": "ChampionKill",
+    "EventTime": 739.8788452148438,
+    "KillerName": "RemiliaScarletx",
+    "VictimName": "刮痧老师傅"
+   },
+   {
+    "Assisters": [
+     "AriannaHeartbell",
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 119,
+    "EventName": "ChampionKill",
+    "EventTime": 744.4924926757812,
+    "KillerName": "兔子也fengkuang",
+    "VictimName": "要是不相识多好"
+   },
+   {
+    "Assisters": [
+     "RemiliaScarletx",
+     "时崎狂三",
+     "要是不相识多好",
+     "妇女能顶半边天"
+    ],
+    "EventID": 120,
+    "EventName": "ChampionKill",
+    "EventTime": 744.6206665039062,
+    "KillerName": "Unconscious丶",
+    "VictimName": "兔子也fengkuang"
+   },
+   {
+    "Assisters": [
+     "AriannaHeartbell",
+     "师B的世界你不知",
+     "刮痧老师傅",
+     "taskkill"
+    ],
+    "EventID": 121,
+    "EventName": "ChampionKill",
+    "EventTime": 752.1268920898438,
+    "KillerName": "兔子也fengkuang",
+    "VictimName": "Unconscious丶"
+   },
+   {
+    "EventID": 122,
+    "EventName": "Multikill",
+    "EventTime": 752.1268920898438,
+    "KillStreak": 2,
+    "KillerName": "兔子也fengkuang"
+   },
+   {
+    "Assisters": [
+     "Unconscious丶",
+     "RemiliaScarletx",
+     "要是不相识多好",
+     "妇女能顶半边天"
+    ],
+    "EventID": 123,
+    "EventName": "ChampionKill",
+    "EventTime": 752.43701171875,
+    "KillerName": "时崎狂三",
+    "VictimName": "taskkill"
+   },
+   {
+    "Acer": "时崎狂三",
+    "AcingTeam": "CHAOS",
+    "EventID": 124,
+    "EventName": "Ace",
+    "EventTime": 752.43701171875
+   },
+   {
+    "Assisters": [
+     "RemiliaScarletx",
+     "妇女能顶半边天"
+    ],
+    "EventID": 125,
+    "EventName": "TurretKilled",
+    "EventTime": 757.601318359375,
+    "KillerName": "时崎狂三",
+    "TurretKilled": "Turret_TOrder_L1_P3_2250400266_0"
+   },
+   {
+    "Assisters": [
+     "AriannaHeartbell"
+    ],
+    "EventID": 126,
+    "EventName": "ChampionKill",
+    "EventTime": 781.4999389648438,
+    "KillerName": "师B的世界你不知",
+    "VictimName": "时崎狂三"
+   },
+   {
+    "Assisters": [
+     "RemiliaScarletx"
+    ],
+    "EventID": 127,
+    "EventName": "ChampionKill",
+    "EventTime": 783.7503662109375,
+    "KillerName": "妇女能顶半边天",
+    "VictimName": "AriannaHeartbell"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "AriannaHeartbell",
+     "师B的世界你不知"
+    ],
+    "EventID": 128,
+    "EventName": "ChampionKill",
+    "EventTime": 787.3493041992188,
+    "KillerName": "刮痧老师傅",
+    "VictimName": "RemiliaScarletx"
+   },
+   {
+    "Assisters": [],
+    "EventID": 129,
+    "EventName": "ChampionKill",
+    "EventTime": 789.6552124023438,
+    "KillerName": "妇女能顶半边天",
+    "VictimName": "兔子也fengkuang"
+   },
+   {
+    "EventID": 130,
+    "EventName": "Multikill",
+    "EventTime": 789.6552124023438,
+    "KillStreak": 2,
+    "KillerName": "妇女能顶半边天"
+   },
+   {
+    "Assisters": [
+     "兔子也fengkuang",
+     "AriannaHeartbell",
+     "刮痧老师傅"
+    ],
+    "EventID": 131,
+    "EventName": "ChampionKill",
+    "EventTime": 790.4064331054688,
+    "KillerName": "师B的世界你不知",
+    "VictimName": "妇女能顶半边天"
+   },
+   {
+    "EventID": 132,
+    "EventName": "Multikill",
+    "EventTime": 790.4064331054688,
+    "KillStreak": 2,
+    "KillerName": "师B的世界你不知"
+   },
+   {
+    "EventID": 133,
+    "EventName": "InhibRespawned",
+    "EventTime": 817.576171875,
+    "InhibRespawned": "Inhib_TChaos_L1_P1_2432143522_0"
+   },
+   {
+    "Assisters": [
+     "师B的世界你不知",
+     "刮痧老师傅"
+    ],
+    "EventID": 134,
+    "EventName": "ChampionKill",
+    "EventTime": 818.0961303710938,
+    "KillerName": "taskkill",
+    "VictimName": "要是不相识多好"
+   }
+  ]
+ },
+ "gameData": {
+  "gameMode": "KIWI",
+  "gameTime": 820.4676513671875,
+  "mapName": "Map12",
+  "mapNumber": 12,
+  "mapTerrain": "Default"
+ }
+}
