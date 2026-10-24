@@ -6,35 +6,30 @@
 
 ## P0 · 下一轮就做
 
-### 1. 看视频 v1：自动检测死亡/复活（独立插件）
-- **为什么**：手动版已经跑通"切出/切回/静音/恢复"，v1 只换触发器，价值最大
-- **数据源**：Live Client Data API `https://127.0.0.1:2999/liveclientdata/allgamedata`
-  的 `activePlayer.respawnTimer`（>0 表示死亡，倒计时归零即复活）
-  - ⚠️ 必须在对局中实测（该接口只在对局期间由游戏进程提供；之前用 http 探过是无效的，要用 https）
-- **兜底**：接口不可用时退"死亡灰屏 + 倒计时 OCR"
-- **验收**：一局里死亡→自动切出、复活→自动切回；日志能看出是哪条判据
-- **红线**：绝不读游戏内存（见文末"已否决"）
+### 1. ✅ 看视频 v1：自动检测死亡/复活（2026-10-25 完成，DeathWatchPlugin）
+- ~~数据源：activePlayer.respawnTimer~~ → **真机实测推翻**：respawnTimer 在
+  `allPlayers[]` 里（activePlayer 没有这个字段），按 riotIdGameName 认出自己再读
+- 兜底已实现：接口取不到 → 死亡灰屏（整窗饱和度骤降）+ OCR 倒计时（Windows 自带 OCR）
+- 插件间协作：契约新增 `IVideoSwitcher` + `GetService<T>()`，v1 只判断、v0 只切窗
+- **意外收获**：两个插件都带 WinRT 投影时，第二份初始化会炸
+  （"Attempt to update previously set global instance"）→ 宿主已加共享运行时预载
+- **剩真机验证**（下一局对局）：死了会不会切出、复活会不会切回、灰屏阈值 40 对不对
+  （活着基线实测 ≈84）。点一下卡片能看当前读数，日志写明是哪条判据
 
-### 2. 测试基建：把探针收进仓库
-- 今天现造了三个探针（SMTC 播放状态 / 插件依赖解析 / 自动收尾判断），都只存在于临时目录
-- 目标：`tools/probe/` 下一个可复用的控制台工程，发布前跑一遍
-- **验收**：`dotnet run --project tools/probe` 能一次性输出三项检查结果
+### 2. ✅ 测试基建（2026-10-25 完成）
+- `tools/probe/`：`dotnet run --project tools/probe` 一次跑 7 项检查
+  （Live 解析 / 插件依赖 / SMTC / 音频会话 / 自动收尾四组合 / OCR / GDI 抓屏），全过退出码 0
+- 夹具是真机抓的 allgamedata 样本（人名已替换成 玩家N），重抓：`python tools/probe/make_fixture.py`
+- **限制**：探针全过 ≠ 真机没问题，切窗口/真死亡仍要对局验证
 
-### 3. 发布脚本化
-- 现在发布靠手工命令：build → publish .dev → 拷插件（含依赖）→ 打包 dist → tag
-- 目标：`tools/release.ps1 -Version 0.3.0`：一条命令完成，并自动排除 settings/日志
-- **验收**：跑一次能得到干净的 `dist/` + 打好 tag，`git push --tags` 后 GitHub 能看到
+### 3. ✅ 发布脚本化（2026-10-25 完成）
+- `tools/release.ps1 -Version 0.3.0`：build → publish → 装配插件（含 WinRT 依赖、
+  剔除 Contracts）→ 清理发布包 → 自测截图 → tag → zip（-Upload 再发 GitHub Release）
+- 开发迭代：`tools/release.ps1 -OutDir .dev -NoTag`
+- **门禁不在脚本里**：进 dist 的前提仍是用户确认过这版能用
 
-### 4. 开发流程规范（需求→设计→开发→测试→发布）
-草案（待认可后写进 README，并做成模板）：
-
-| 阶段 | 输入 | 产出 | 门禁（不满足不进下一步） |
-|---|---|---|---|
-| 需求 | 一句话描述 | 写进 TODO，含**可观测的验收标准** | 没有验收标准 → 不进入设计 |
-| 设计 | 需求 | 数据来源 / 失败模式 / 是否触碰红线 | 需要读内存或注入 → 直接否决 |
-| 开发 | 设计 | 插件目录（含 `说明.md`）、零警告构建 | build 有警告 → 先清干净 |
-| 测试 | 开发产物 | 三层证据：探针级 → `--selftest` → 真机实测 | 真机未实测 → 不进 dist |
-| 发布 | 通过测试的构建 | `dist/` + tag + GitHub Release | 用户未确认 → 不写 dist |
+### 4. ✅ 开发流程规范（2026-10-25 写进 README + 模板）
+- 五阶段门禁见 README「开发流程」；每次开新功能复制 `模板-新功能.md` 填
 
 ## P1 · 有空再做
 
@@ -48,7 +43,7 @@
 - 要做：枚举全部渲染设备，逐个处理
 
 ### 7. 看视频：体验增强
-- 死亡时长门槛（太短的死亡不值得切，来回切反而烦）
+- ~~死亡时长门槛~~ → **已随 v1 实现**（`minRespawnSec`，默认 8 秒）
 - 支持多站点快速切换（而不是只改一个网址）
 - 记住上次看到的位置（同站点内）
 
