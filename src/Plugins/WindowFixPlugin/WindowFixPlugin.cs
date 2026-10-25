@@ -72,13 +72,33 @@ public sealed class WindowFixPlugin : ILolPlugin, ISettingsChangedAware, ISelfTe
         return p.showCmd == SW_SHOWMINIMIZED;
     }
 
-    /// <summary>给窗口伪造一次 WM_DPICHANGED，让它按新 DPI 重算布局（原版的关键一步）。</summary>
+    /// <summary>
+    /// 给窗口伪造一次 WM_DPICHANGED，让它按新 DPI 重算布局（原版的关键一步）。
+    ///
+    /// ⚠ 这里原来写的是 `Marshal.UnsafeAddrOfPinnedArrayElement(new int[4], 0)` ——
+    /// 数组创建完就没有任何引用，随时可能被 GC 回收，等于把一个**悬空指针**当 lParam 发出去。
+    /// 现在改成显式 AllocHGlobal / FreeHGlobal，并把真实窗口矩形填进去。
+    ///
+    /// 另外必须知道：SendMessage 跨进程只搬 lParam 这个 8 字节**数值**，
+    /// 不会把指针指向的内存复制进对方进程，所以严格说这个 lParam 对客户端没有意义 ——
+    /// 真正起作用的是 wParam 里的 DPI 值（业界 fix-lcu-window 也是这么用的）。
+    /// 至少别给对方一个我们自己都不认识的地址。
+    /// </summary>
     private static void PatchDpiChangedMessage(IntPtr hWnd)
     {
         uint dpi = GetDpiForWindow(hWnd);
         var wParam = (IntPtr)((int)dpi << 16 | (int)dpi);
-        var lParam = Marshal.UnsafeAddrOfPinnedArrayElement(new int[4], 0);
-        SendMessage(hWnd, WM_DPICHANGED, wParam, lParam);
+
+        var rect = new RECT();
+        GetWindowRect(hWnd, ref rect);      // 拿不到就全 0，和以前的行为一致
+
+        IntPtr buf = Marshal.AllocHGlobal(Marshal.SizeOf<RECT>());
+        try
+        {
+            Marshal.StructureToPtr(rect, buf, false);
+            SendMessage(hWnd, WM_DPICHANGED, wParam, buf);
+        }
+        finally { Marshal.FreeHGlobal(buf); }
     }
 
     // ---------------- 插件本体 ----------------

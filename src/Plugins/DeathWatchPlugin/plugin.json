@@ -5,15 +5,15 @@
   "entry": "DeathWatchPlugin.DeathWatchPlugin, DeathWatchPlugin",
   "order": 65,
   "enabled": true,
-  "description": "死亡自动切到视频、复活自动切回",
+  "description": "死亡自动切到视频、复活自动切回（卡片本身就是一个开关）",
   "settings": [
     {
       "key": "auto",
-      "label": "自动检测死亡",
+      "label": "自动看视频",
       "type": "bool",
       "default": true,
       "show": "always",
-      "note": "对局中检测到死亡就自动切到视频，复活（倒计时归零）自动切回。关掉后本插件只检测、不切换"
+      "note": "和卡片上的开关是同一个（点卡片左半边也能开关）。开着时检测到死亡自动切到视频、复活自动切回；关掉后不再切换窗口，如果当时正在看视频会先把你送回游戏"
     },
     {
       "key": "minRespawnSec",

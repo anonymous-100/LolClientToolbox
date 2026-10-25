@@ -7,23 +7,14 @@ using System.Text;
 namespace WatchVideoPlugin;
 
 /// <summary>
-/// 这个插件要的 Win32 全部在这：全局热键、窗口枚举、前台切换、媒体键。
+/// 这个插件要的 Win32 全部在这：窗口枚举、前台切换、媒体键。
 ///
 /// 为什么不用 WinForms：插件是净 net9.0 类库，拿不到 Form 的消息循环。
-/// RegisterHotKey 传 hWnd=IntPtr.Zero 时，WM_HOTKEY 会投递到**调用它的线程**的消息队列，
-/// 所以只要一条自己跑的 GetMessage 线程就够了 —— 不用造隐藏窗口。
+/// 热键那一套（RegisterHotKey / GetAsyncKeyState）已经删掉了 ——
+/// 2026-10-25 起本插件没有手动入口，只被动响应「看视频（自动）」的调用。
 /// </summary>
 internal static class Win32
 {
-    // ---- 热键 / 消息 ----
-    public const int WM_HOTKEY = 0x0312;
-    public const uint WM_QUIT = 0x0012;
-
-    public const uint MOD_ALT = 0x0001;
-    public const uint MOD_CONTROL = 0x0002;
-    public const uint MOD_SHIFT = 0x0004;
-    public const uint MOD_WIN = 0x0008;
-
     // ---- 窗口 ----
     public const int SW_RESTORE = 9;
     public const int SW_MINIMIZE = 6;
@@ -36,40 +27,7 @@ internal static class Win32
     private const uint INPUT_KEYBOARD = 1;
     private const uint KEYEVENTF_KEYUP = 0x0002;
 
-    [StructLayout(LayoutKind.Sequential)]
-    public struct POINT { public int X; public int Y; }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct MSG
-    {
-        public IntPtr hwnd;
-        public uint message;
-        public IntPtr wParam;
-        public IntPtr lParam;
-        public uint time;
-        public POINT pt;
-    }
-
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-    /// <summary>
-    /// 键盘物理状态。不经过前台窗口，也不受 UIPI 限制 —— 游戏以管理员运行时
-    /// RegisterHotKey 注册的热键会被系统屏蔽（实测 2026-10-24），但这条能读到。
-    /// </summary>
-    [DllImport("user32.dll")]
-    public static extern short GetAsyncKeyState(int vKey);
-    [DllImport("user32.dll")]
-    public static extern int GetMessage(out MSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax);
-    [DllImport("user32.dll")]
-    public static extern bool TranslateMessage(ref MSG lpMsg);
-    [DllImport("user32.dll")]
-    public static extern IntPtr DispatchMessage(ref MSG lpMsg);
-    [DllImport("user32.dll", SetLastError = true)]
-    public static extern bool PostThreadMessage(uint idThread, uint Msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("user32.dll")]
     public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);

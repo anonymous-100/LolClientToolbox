@@ -457,6 +457,8 @@ internal sealed class MainForm : Form, IPluginHost
         DpiChanged += (_, _) => UpdateHint();
         FormClosing += (_, _) =>
         {
+            Log(LogKind.Info, "退出", "开始收尾（插件停止 → 断开客户端订阅）");
+            LogClientLocaleBeforeExit();
             _cts.Cancel();
             _plugins.StopAll();
             _watcher?.Dispose();
@@ -956,6 +958,41 @@ internal sealed class MainForm : Form, IPluginHost
         File.WriteAllText(path, sb.ToString());
         SetStatus($"✓ 已导出：{Path.GetFileName(path)}");
         try { Process.Start("explorer.exe", $"/select,\"{path}\""); } catch { /* 忽略 */ }
+    }
+
+    /// <summary>
+    /// 退出前记一条客户端语言快照（**只读**）。
+    ///
+    /// 起因：2026-10-25 用户报「关掉工具箱后客户端语言好像掉了（不确定）」。
+    /// 全仓库没有任何写客户端 locale 的代码（对客户端的写操作只有「窗口尺寸修正」和
+    /// 用户手动点的「热重载客户端」两处，都不碰语言），但光靠读代码证明不了，
+    /// 所以退出瞬间把客户端自己报的 region-locale 记一行：
+    /// 下次再出现就看这条 —— locale 变了，是我们这边的嫌疑；locale 没变而界面是英文/缺字，
+    /// 那就是客户端自己的事，与工具箱无关。有了这条才好判断，不用再靠猜。
+    /// 只读 + 500ms 超时，客户端没响应就不记，绝不拖慢退出。
+    /// </summary>
+    private void LogClientLocaleBeforeExit()
+    {
+        try
+        {
+            // 丢到线程池里跑：GetExAsync 内部 await 会回到 UI 上下文，直接在 UI 线程 Wait 会互相等死
+            var task = Task.Run(() => _lcu.GetExAsync("/riotclient/region-locale"));
+            if (!task.Wait(500))
+            {
+                Log(LogKind.Info, "退出 · 客户端语言快照", "超时（客户端没响应，可能已经关了）");
+                return;
+            }
+
+            var (status, body, err) = task.Result;
+            var text = body.Trim();
+            if (text.Length == 0) text = err;
+            if (text.Length > 240) text = text[..240] + "…";
+            Log(LogKind.Info, "退出 · 客户端语言快照", $"HTTP {status} {text}");
+        }
+        catch (Exception ex)
+        {
+            Log(LogKind.Info, "退出 · 客户端语言快照", "取不到：" + ex.Message);
+        }
     }
 
     private void OpenSettings()

@@ -1,18 +1,18 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Threading;
 using LolClientToolbox.Contracts;
 
 namespace WatchVideoPlugin;
 
 /// <summary>
-/// 看视频（手动版 / v0）—— 按一下热键切到视频，再按一下暂停视频切回游戏。
+/// 看视频 · 切窗 —— 只提供「切出去看视频 / 切回来」这个**能力**，没有自己的按钮和热键。
 ///
-/// 为什么先做手动版：自动检测死亡有另一套不确定性（要读 Live Client Data API 的
-/// respawnTimer），把它和「窗口焦点/按键时序」捆在一起调，出问题分不清是谁的锅。
-/// 所以 v0 只做纯窗口控制 —— 零检测风险，当天可用；v1 再接检测，只换触发器。
+/// 为什么没有手动入口（2026-10-25 用户拍板「移除手动看视频功能，没有意义」）：
+///   切出去这个动作本身没有价值 —— 有价值的是「死了自动切、复活自动切回」。
+///   所以本插件退化成纯服务：由「看视频（自动）」通过契约里的 <see cref="IVideoSwitcher"/>
+///   指挥它，用户只在自动插件那张卡片上看到一个开关。
 ///
 /// 三条纪律（踩过的坑换来的，改之前先读）：
 /// 1. 切回游戏时的顺序必须是「先暂停视频 → 再切游戏」。反了就会把媒体键/空格
@@ -26,7 +26,6 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware, IVideo
 {
     /// <summary>默认视频地址。用户可在设置里改成任何网址（B站/YouTube/抖音网页版都行）。</summary>
     private const string DefaultUrl = "https://www.douyin.com/";
-    private const string DefaultHotkey = "Ctrl+F8";
 
     /// <summary>这些进程都当浏览器认（国内外常见的那几个）。</summary>
     private static readonly HashSet<string> Browsers = new(StringComparer.OrdinalIgnoreCase)
@@ -36,14 +35,10 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware, IVideo
         "liebao", "maxthon", "yandex",
     };
 
-    private const int HotkeyId = 0x4C56;   // 'LV'
-
     private IPluginHost _host = null!;
     private IPluginSettings _settings = null!;
-    private ICard _card = null!;
 
     private volatile string _url = DefaultUrl;
-    private volatile string _hotkey = DefaultHotkey;
     private volatile bool _pauseOnReturn = true;
     private volatile bool _muteGame = true;
     private volatile bool _autoSwitchBack = true;   // 手动切回游戏时自动补一次关闭
@@ -58,38 +53,29 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware, IVideo
     private IntPtr _browserHwnd;
     private readonly object _toggleLock = new();
 
-    private Thread? _hotkeyThread;
     private Thread? _watchThread;
     private volatile bool _pollStop;
     private DateTime _lastAction = DateTime.MinValue;
+    private DateTime _switchedOutAt = DateTime.MinValue;   // 切出时刻，只用于日志（排查「闪一下就回来」）
 
     public string Id => "watchvideo";
-    public string Name => "看视频（手动）";
+    public string Name => "看视频 · 切窗";
 
     public void Init(IPluginHost host, IPluginSettings settings)
     {
         _host = host;
         _settings = settings;
         ReloadSettings();
-
-        _card = host.RegisterCard(Name,
-            $"热键 {_hotkey}：切到视频 / 切回游戏", showAuto: false)!;
-        _card.Clicked += () => Toggle("卡片");
+        // 注意：这里**不注册卡片**。功能入口只有「看视频（自动）」那一张卡。
     }
 
     public void Start()
     {
-        if (_host.IsSelfTest) return;   // 自测模式不起轮询线程
+        if (_host.IsSelfTest) return;   // 自测模式不起监听线程
 
-        WarnIfClientElevated();
+        CheckElevation();
 
         _pollStop = false;
-        _hotkeyThread = new Thread(HotkeyLoop)
-        {
-            IsBackground = true,
-            Name = "watchvideo-hotkey",
-        };
-        _hotkeyThread.Start();
 
         // 前台监听：用户手动 Alt+Tab 回游戏时，自动补一次「关闭视频」
         _watchThread = new Thread(ForegroundWatchLoop)
@@ -98,15 +84,15 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware, IVideo
             Name = "watchvideo-fgwatch",
         };
         _watchThread.Start();
+
+        _host.Log(LogLevel.Info, "切窗能力已就绪", "由「看视频（自动）」调用，本插件没有独立按钮");
     }
 
     /// <summary>
-    /// 客户端（含游戏）以管理员权限运行时，Windows 会：
-    /// ① 忽略普通权限进程注册的全局热键 ② 禁止普通权限进程抢它的前台
-    /// ③ 甚至不把键盘状态暴露给普通权限进程（GetAsyncKeyState 也读不到）
-    /// 三件事叠加的结果就是「热键完全没反应」。启动时先喊一声，省得用户以为是插件坏了。
+    /// 客户端（含游戏）以管理员权限运行时，Windows 会阻止普通权限进程把别的窗口拉到前台（UIPI）——
+    /// 表现就是「切出去了但浏览器没到前面」。启动时先喊一声，省得用户以为是插件坏了。
     /// </summary>
-    private void WarnIfClientElevated()
+    private void CheckElevation()
     {
         try
         {
@@ -117,10 +103,10 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware, IVideo
             int myIl = Win32.IntegrityLevel(Environment.ProcessId);
             if (clientIl > myIl && myIl > 0)
             {
-                _host.Log(LogLevel.Warn, "客户端以管理员权限运行，热键会被 Windows 拦截",
+                _host.Log(LogLevel.Warn, "客户端以管理员权限运行，切窗口可能被 Windows 拦",
                     $"客户端={IlName(clientIl)}，本程序={IlName(myIl)}。"
-                    + "要么以普通权限启动 Riot 客户端（推荐，一次解决），要么让本程序同样以管理员运行");
-                _host.SetStatus("⚠ 客户端是管理员权限，热键会被拦——建议用普通权限启动客户端", true);
+                    + "切到浏览器时可能抢不到前台。要么以普通权限启动 Riot 客户端（推荐，一次解决），"
+                    + "要么让本程序同样以管理员运行");
             }
         }
         catch { /* 诊断失败不影响功能 */ }
@@ -129,14 +115,33 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware, IVideo
     public void Stop()
     {
         _pollStop = true;
-        try { _hotkeyThread?.Join(600); } catch { /* 退出时不计较 */ }
-        try { _watchThread?.Join(600); } catch { }
+        try { _watchThread?.Join(600); } catch { /* 退出时不计较 */ }
+
+        // 退出时必须把游戏声音放开：如果这时还在「视频模式」，游戏是我们静音着的，
+        // 直接关掉程序就再也没人恢复它 —— 用户感受就是「关掉工具箱后游戏/语音没声音了」。
+        RestoreGameAudioOnExit();
+    }
+
+    /// <summary>退出时的收尾：只恢复游戏声音，不动浏览器（人家可能还在看）。</summary>
+    private void RestoreGameAudioOnExit()
+    {
+        bool wasInVideo = _inVideoMode;
+        _inVideoMode = false;
+        if (!wasInVideo || !_muteGame) return;
+        try
+        {
+            if (!IsGameRunning()) return;
+            int n = AudioMute.SetMuteByProcessName("League of Legends", false);
+            _host.Log(LogLevel.Info, "退出前恢复游戏声音",
+                n > 0 ? $"视频模式未退出，已取消静音（{n} 个会话）" : "没找到游戏的音频会话");
+        }
+        catch { /* 退出路径上什么都不许抛 */ }
     }
 
     /// <summary>
     /// 前台监听：**用户手动 Alt+Tab 回游戏**时，自动补一次「关闭视频」。
     ///
-    /// 不按热键而自己切回去是很自然的操作，但那样视频会在后台一直播、游戏还留在静音状态
+    /// 不按开关而自己切回去是很自然的操作，但那样视频会在后台一直播、游戏还留在静音状态
     /// （游戏静音只有我们主动恢复才行）。
     ///
     /// 判断依据是**状态** `_inVideoMode`（SwitchOut 置真 / SwitchBack 置假），
@@ -153,15 +158,23 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware, IVideo
             {
                 if (_autoSwitchBack && _inVideoMode)
                 {
-                    if (ShouldAutoClose(Win32.GetForegroundWindow(), out _)
+                    if (ShouldAutoClose(Win32.GetForegroundWindow(), out var reason)
                         && (DateTime.Now - _lastAction).TotalMilliseconds > 800)
                     {
                         lock (_toggleLock)
                         {
-                            // 进锁后再确认一次：可能刚才热键已经处理掉了
+                            // 进锁后再确认一次：可能刚才 SwitchBack 已经处理掉了
                             if (_inVideoMode)
                             {
-                                try { DoSwitchBack("自动"); }
+                                try
+                                {
+                                    // 日志里带上「谁抢了前台 + 切出后多久」，这样「刚切出去 3 秒就被关回来」
+                                    // 这种疑难能直接从日志看出是游戏抢回焦点还是人自己切回来的
+                                    double dwell = _switchedOutAt == DateTime.MinValue
+                                        ? 0
+                                        : (DateTime.Now - _switchedOutAt).TotalSeconds;
+                                    DoSwitchBack($"自动 · {reason} · 切出后 {dwell:0.0}s");
+                                }
                                 catch (Exception ex)
                                 {
                                     _host.Log(LogLevel.Warn, "自动切回失败（手动切回游戏时）", ex.Message);
@@ -192,140 +205,19 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware, IVideo
         var proc = ProcOf(foreground);
         if (!IsGameProcess(proc)) { reason = $"前台是 {proc}，不是游戏"; return false; }
 
-        reason = $"前台是游戏（{proc}），该收尾";
+        reason = $"前台是 {proc}";
         return true;
     }
 
-    public void OnSettingsChanged()
-    {
-        ReloadSettings();
-        // 热键改了：停掉旧线程再起一条（轮询线程读的是启动时解析出来的键）
-        RestartHotkeyThread();
-    }
+    public void OnSettingsChanged() => ReloadSettings();
 
     private void ReloadSettings()
     {
         _url = _settings.Get("videoUrl", DefaultUrl);
-        _hotkey = _settings.Get("hotkey", DefaultHotkey);
         _pauseOnReturn = _settings.Get("pauseOnReturn", true);
         _muteGame = _settings.Get("muteGame", true);
         _autoSwitchBack = _settings.Get("autoSwitchBack", true);
         if (string.IsNullOrWhiteSpace(_url)) _url = DefaultUrl;
-        if (string.IsNullOrWhiteSpace(_hotkey)) _hotkey = DefaultHotkey;
-    }
-
-    // ================= 热键线程 =================
-
-    /// <summary>
-    /// 热键用**轮询键盘状态**实现，不用 RegisterHotKey。
-    ///
-    /// 原因（2026-10-24 实测）：游戏进程是 High 完整性（管理员权限运行），工具箱是 Medium。
-    /// UIPI 规定低完整性进程注册的全局热键在**高完整性窗口有焦点时被系统忽略** ——
-    /// 表现就是「切进游戏后 Ctrl+F8 完全没反应」，而同一时刻在桌面上按是好的。
-    /// GetAsyncKeyState 读的是键盘物理状态，不经过前台窗口，也不受 UIPI 限制，所以能穿透。
-    ///
-    /// 代价：35ms 轮询（约 28 次/秒，开销可忽略），最坏 35ms 延迟，肉眼看不出。
-    /// </summary>
-    private void HotkeyLoop()
-    {
-        var (mods, vk) = ParseHotkey(_hotkey);
-        _host.Log(LogLevel.Info, $"热键 {_hotkey} 已启用",
-            "轮询键盘状态（游戏提权时 RegisterHotKey 会被屏蔽，所以不用它）");
-
-        bool wasDown = false;
-        while (!_pollStop)
-        {
-            bool down = false;
-            try { down = HotkeyDown(mods, vk); } catch { /* 轮询绝不能抛 */ }
-
-            if (down && !wasDown) Toggle("热键");   // 只在按下的那一瞬触发，长按不重复
-            wasDown = down;
-
-            Thread.Sleep(35);
-        }
-    }
-
-    /// <summary>修饰键必须「该按的按下、没写的没按」，避免 Ctrl+Shift+F8 之类误触发。</summary>
-    private static bool HotkeyDown(uint mods, uint vk)
-    {
-        bool ctrl = Down(VK_CONTROL);
-        bool alt = Down(VK_MENU);
-        bool shift = Down(VK_SHIFT);
-        bool win = Down(VK_LWIN) || Down(VK_RWIN);
-
-        if (((mods & Win32.MOD_CONTROL) != 0) != ctrl) return false;
-        if (((mods & Win32.MOD_ALT) != 0) != alt) return false;
-        if (((mods & Win32.MOD_SHIFT) != 0) != shift) return false;
-        if (((mods & Win32.MOD_WIN) != 0) != win) return false;
-
-        return Down((int)vk);
-    }
-
-    private const int VK_SHIFT = 0x10;
-    private const int VK_CONTROL = 0x11;
-    private const int VK_MENU = 0x12;      // Alt
-    private const int VK_LWIN = 0x5B;
-    private const int VK_RWIN = 0x5C;
-
-    private static bool Down(int vk) => (Win32.GetAsyncKeyState(vk) & 0x8000) != 0;
-
-    private void RestartHotkeyThread()
-    {
-        Stop();
-        Start();
-    }
-
-    /// <summary>解析 "Ctrl+Alt+F8" 这类写法 → (修饰键, 虚拟键)。认不出来的回落到 Ctrl+F8。</summary>
-    private static (uint Mods, uint Vk) ParseHotkey(string text)
-    {
-        uint mods = 0;
-        uint vk = 0x77;   // F8
-        if (string.IsNullOrWhiteSpace(text)) return (Win32.MOD_CONTROL, vk);
-
-        foreach (var raw in text.Split('+', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            var part = raw.Trim();
-            if (part.Equals("Ctrl", StringComparison.OrdinalIgnoreCase)
-                || part.Equals("Control", StringComparison.OrdinalIgnoreCase)) mods |= Win32.MOD_CONTROL;
-            else if (part.Equals("Alt", StringComparison.OrdinalIgnoreCase)) mods |= Win32.MOD_ALT;
-            else if (part.Equals("Shift", StringComparison.OrdinalIgnoreCase)) mods |= Win32.MOD_SHIFT;
-            else if (part.Equals("Win", StringComparison.OrdinalIgnoreCase)) mods |= Win32.MOD_WIN;
-            else if (part.Length >= 2 && (part[0] == 'F' || part[0] == 'f')
-                     && int.TryParse(part[1..], out var fn) && fn >= 1 && fn <= 24)
-                vk = (uint)(0x70 + fn - 1);                  // VK_F1 = 0x70
-            else if (part.Length == 1 && char.IsLetterOrDigit(part[0]))
-                vk = char.ToUpperInvariant(part[0]);         // 字母数字直接用 ASCII 当 VK
-        }
-
-        if (mods == 0) mods = Win32.MOD_CONTROL;             // 不带修饰键容易和游戏键冲突
-        if (vk == 0) vk = 0x77;
-        return (mods, vk);
-    }
-
-    // ================= 主流程 =================
-
-    private void Toggle(string trigger)
-    {
-        // 连按两下不要打架：加锁串行化（热键线程和卡片点击可能同时来）
-        lock (_toggleLock)
-        {
-            try
-            {
-                // 方向看真实前台，不看内部标志 —— 用户会手动 Alt+Tab，标志早就失真。
-                // 实测 2026-10-24 03:27 就因此做反了方向：进对局后第一次按，去执行「切回」，
-                // 结果什么也没发生（还白给游戏发了媒体键）。
-                bool browserInFront = IsBrowserProcess(ProcOf(Win32.GetForegroundWindow()));
-                if (browserInFront) DoSwitchBack(trigger);
-                else DoSwitchOut(trigger);
-            }
-            catch (Exception ex)
-            {
-                _card.SetResult(false, "失败");
-                _card.Restore();
-                _host.Log(LogLevel.Error, $"切视频失败（{trigger}）：{ex.Message}");
-                _host.SetStatus("✕ 切视频失败：" + ex.Message, true);
-            }
-        }
     }
 
     // ================= 对外能力（IVideoSwitcher） =================
@@ -372,8 +264,6 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware, IVideo
     /// <summary>切出去看视频：找浏览器（没有就启动）→ 聚焦 → 上次是我们暂停的就恢复播放。</summary>
     private void DoSwitchOut(string trigger)
     {
-        _card.SetRunning();
-
         IntPtr hwnd = FindBrowserWindow();
         bool launched = false;
         if (hwnd == IntPtr.Zero)
@@ -392,7 +282,11 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware, IVideo
 
         bool focused = Win32.ForceForeground(hwnd);
         _browserHwnd = hwnd;
-        Thread.Sleep(120);   // 给浏览器一点时间拿到焦点
+        Thread.Sleep(150);   // 给浏览器一点时间真正拿到焦点
+
+        // 再确认一次前台到底是谁：游戏以管理员权限跑时，UIPI 会让 ForceForeground 当场返回 true、
+        // 但 150ms 后前台又回到游戏（真机日志见过这种「切出去 3 秒就被弹回来」）。
+        bool front = IsBrowserProcess(ProcOf(Win32.GetForegroundWindow()));
 
         // 恢复播放：优先用系统媒体会话「精确置为播放」（已经是播放状态就什么也不做）。
         // 注意：Playback 依赖 WinRT 投影，缺 dll 时会在调用点抛异常 —— 必须就地兜住，
@@ -426,17 +320,18 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware, IVideo
             }
         }
 
-        _card.SetResult(true, "已切出");
-        _card.Restore();
         _lastAction = DateTime.Now;
+        _switchedOutAt = _lastAction;
         _inVideoMode = true;   // 自动收尾的状态标志（手动 Alt+Tab 回游戏时靠它）
 
         var note = (launched ? $"已启动 {_url}" : "聚焦已有浏览器窗口")
                    + (resumed ? " · 视频在播" : "")
                    + muteNote
-                   + (focused ? "" : " · ⚠前台切换未确认");
-        _host.Log(LogLevel.Auto, $"切出看视频（{trigger}）", note);
-        _host.SetStatus("▶ 已切到视频（游戏已静音）· 再按一次热键切回");
+                   + (front ? "" : " · ⚠浏览器没抢到前台（ForceForeground 返回 " + focused + "）");
+        _host.Log(front ? LogLevel.Auto : LogLevel.Warn, $"切出看视频（{trigger}）", note);
+        _host.SetStatus(front
+            ? "▶ 已切到视频（游戏已静音）· 复活后自动切回"
+            : "⚠ 切到了视频窗口，但前台被游戏占着（客户端是管理员权限？）", !front);
     }
 
     /// <summary>
@@ -450,8 +345,6 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware, IVideo
     /// </summary>
     private void DoSwitchBack(string trigger)
     {
-        _card.SetRunning();
-
         IntPtr fg = Win32.GetForegroundWindow();
         // 前台不是浏览器时别直接报错：如果记着的浏览器窗口还活着就用它
         // （用户可能手动点了别的窗口，但视频还在那儿）
@@ -465,7 +358,7 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware, IVideo
         }
 
         // 一进这里就先退出「视频模式」：即使后面失败也不再自动重试，
-        // 免得前台一直在游戏时每 800ms 重试一次、刷满日志。用户按 F8 可手动重来。
+        // 免得前台一直在游戏时每 800ms 重试一次、刷满日志。
         _inVideoMode = false;
 
         // 先暂停视频。**精确置为暂停**，不再用切换式媒体键 ——
@@ -530,9 +423,8 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware, IVideo
             }
         }
 
-        _card.SetResult(true, backToGame ? "已回到游戏" : "已关闭");
-        _card.Restore();
         _lastAction = DateTime.Now;
+        _switchedOutAt = DateTime.MinValue;
 
         var note = (backToGame ? "已回到游戏" : $"⚠焦点落在 {nowProc}" + Win32.Title(now))
                    + " · 视频窗口已最小化"
@@ -543,21 +435,6 @@ public sealed class WatchVideoPlugin : ILolPlugin, ISettingsChangedAware, IVideo
         _host.SetStatus(backToGame
             ? "◀ 已关闭视频，回到游戏"
             : $"⚠ 视频已关，但焦点不在游戏（{nowProc}）——按一下游戏窗口即可", !backToGame);
-    }
-
-    /// <summary>抢前台失败的原因诊断。目前唯一确定的原因是权限层级差（UIPI）。</summary>
-    private static string BlockReason(IntPtr target)
-    {
-        try
-        {
-            int targetIl = Win32.IntegrityLevel(Win32.ProcessIdOf(target));
-            int myIl = Win32.IntegrityLevel(Environment.ProcessId);
-            if (targetIl > 0 && myIl > 0 && targetIl > myIl)
-                return $"目标窗口是{IlName(targetIl)}，本程序是{IlName(myIl)}，"
-                       + "Windows 不允许低权限进程抢高权限窗口的前台 → 右键以管理员身份运行工具箱";
-        }
-        catch { /* 诊断失败不影响主流程 */ }
-        return "";
     }
 
     private static string IlName(int il) => il switch

@@ -1,11 +1,11 @@
 {
   "id": "watchvideo",
-  "name": "看视频（手动）",
+  "name": "看视频 · 切窗",
   "assembly": "WatchVideoPlugin.dll",
   "entry": "WatchVideoPlugin.WatchVideoPlugin, WatchVideoPlugin",
   "order": 60,
   "enabled": true,
-  "description": "热键切到视频 / 切回游戏（v0 手动版）",
+  "description": "给「看视频（自动）」提供切窗口 / 静音能力，没有独立按钮（2026-10-25 起手动入口已移除）",
   "settings": [
     {
       "key": "videoUrl",
@@ -13,15 +13,7 @@
       "type": "text",
       "default": "https://www.douyin.com/",
       "show": "always",
-      "note": "按热键时如果浏览器没开，就用它启动。B站/YouTube/抖音网页版都行；只在「没有浏览器窗口」时才启动新页面，已有浏览器只做聚焦，不会每死一次多一个标签"
-    },
-    {
-      "key": "hotkey",
-      "label": "切换热键",
-      "type": "text",
-      "default": "Ctrl+F8",
-      "show": "always",
-      "note": "写法如 Ctrl+F8 / Alt+Shift+V。必须带 Ctrl/Alt/Shift/Win 之一，否则容易和游戏里的键冲突。改完立刻生效"
+      "note": "切出去时如果没开着浏览器，就用它启动页面。B站/YouTube/抖音网页版都行；已有浏览器窗口只做聚焦，不会每死一次多一个标签"
     },
     {
       "key": "pauseOnReturn",
@@ -37,7 +29,7 @@
       "type": "bool",
       "default": true,
       "show": "always",
-      "note": "只静音 League of Legends.exe 这个进程的音频会话，切回时恢复。客户端不动 —— 队伍语音在客户端进程里，不能一起掐"
+      "note": "只静音 League of Legends.exe 这个进程的音频会话，切回时恢复。客户端不动 —— 队伍语音在客户端进程里，不能一起掐。退出程序时如果还停在视频模式，会自动帮你恢复声音"
     },
     {
       "key": "autoSwitchBack",
@@ -45,7 +37,7 @@
       "type": "bool",
       "default": true,
       "show": "always",
-      "note": "不按热键、自己 Alt+Tab 回游戏时，自动补一次「暂停视频 + 恢复游戏声音」。不勾的话只能靠热键切回，手动回去会留着后台播放"
+      "note": "自己 Alt+Tab 回游戏时，自动补一次「暂停视频 + 恢复游戏声音」。不勾的话回到游戏后视频会一直在后台播、游戏还留着静音"
     }
   ]
 }
