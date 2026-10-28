@@ -224,11 +224,13 @@ internal sealed class MainForm : Form, IPluginHost
 
         // ---------- 运行日志：固定 4 行 ----------
         // 只在「有东西变了」时记一行，并标出上一阶段停留多久。
-        // 以前是 Dock.Fill 吃剩余高度；卡片区改成「固定高 + 滑动」之后高低归滚动条管，
-        // 日志固定 4 行（标题行 26 + 4×26 = 130）—— 永远看得见最近几条，也不跟卡片区抢高度。
+        //
+        // 高度用 Fill 吃剩余：以前是「固定 5 行贴底」，卡片区一变小（比如改列数）
+        // 两者之间就空出一大块（2026-10-28 用户反馈）。Fill 之后卡片少时日志自动变高，
+        // 一点空间不浪费，也不用再猜日志该占几行。
         var logPanel = new Panel
         {
-            Dock = DockStyle.Bottom, Height = 26 + T.LogRowH * 5,
+            Dock = DockStyle.Fill,
             BackColor = Bg, Padding = new Padding(T.PadOuter, 0, T.PadOuter, 0),
         };
         var logHead = new Panel { Dock = DockStyle.Top, Height = 26, BackColor = Bg };
@@ -1130,11 +1132,19 @@ internal sealed class MainForm : Form, IPluginHost
 
         var ordered = ApplyCardLayout(_plugins.Cards);
         int cols = ColumnsFor(ordered.Count);
-        int innerW = Math.Max(320, ClientSize.Width - T.PadOuter * 2);
-        int cardW = (innerW - CardGap * (cols - 1)) / cols;
         int rows = (ordered.Count + cols - 1) / cols;
-        int contentH = rows == 0 ? 0 : rows * T.CardH + (rows - 1) * CardGap;
         bool allHidden = ordered.Count == 0;
+
+        // 卡片区高度 = 「实际行数」和「最多显示几行」取小，超出的靠 AutoScroll 滚
+        int maxRows = _settings.CardRows > 0 ? Math.Clamp(_settings.CardRows, 1, 10) : 3;
+        int shownRows = Math.Max(1, Math.Min(rows, maxRows));
+        int shownH = shownRows * T.CardH + (shownRows - 1) * CardGap;
+        bool needScroll = rows > shownRows;
+
+        // 要滚动时给竖滚动条留位置，否则最右一列被条子压掉一截
+        int innerW = Math.Max(320, ClientSize.Width - T.PadOuter * 2
+                                   - (needScroll ? SystemInformation.VerticalScrollBarWidth : 0));
+        int cardW = (innerW - CardGap * (cols - 1)) / cols;
 
         _cardsHost.SuspendLayout();
         try
@@ -1186,7 +1196,7 @@ internal sealed class MainForm : Form, IPluginHost
 
             _cardsHost.Height = allHidden
                 ? T.Sp3 * 2 + 26                                    // 留一行放提示
-                : Math.Min(contentH + T.Sp3 * 2, 330);              // 最多约 3 行，再多就滚
+                : shownH + T.Sp3 * 2;
         }
         finally
         {
@@ -1224,23 +1234,16 @@ internal sealed class MainForm : Form, IPluginHost
     }
 
     /// <summary>
-    /// 拖动中：① 让被拖的卡片跟着鼠标走（这就是「预览」，不用截图/悬浮窗 ——
-    /// 直接改这张卡的 Location 最稳，也不会闪）；② 把鼠标底下那张卡标成落点。
-    /// 这期间其他卡片位置一概不动，只有松手才重排。
+    /// 拖动中：只把鼠标底下那张卡标成落点，**卡片本身不动**。
+    ///
+    /// 为什么不做「卡片跟随鼠标」的预览：那要为一张卡每帧改坐标 + 重绘，
+    /// 还会盖住落点、拖出边界被裁。这个程序一屏就六七张卡，交换语义配一个
+    /// 清晰的落点高亮已经完全够用，渲染开销接近零（只重画描边）。
     /// </summary>
     private void CardDragMoved(object? sender, Point screenPt)
     {
         if (_dragSrc is null) return;
-
-        var c = _dragSrc.Control;
-        if (c is not null && _cardsHost is not null)
-        {
-            var local = _cardsHost.PointToClient(screenPt);
-            c.BringToFront();                                  // 别被别的卡压住
-            c.Location = new Point(local.X - c.Width / 2, local.Y - c.Height / 2);
-        }
-
-        var target = AdapterAtScreen(screenPt);
+        var target = AdapterAtScreen(screenPt, exclude: _dragSrc);
         foreach (var a in _plugins.Cards)
             a.Control?.SetDropHint(!ReferenceEquals(a, _dragSrc) && ReferenceEquals(a, target));
     }
@@ -1254,18 +1257,22 @@ internal sealed class MainForm : Form, IPluginHost
 
         if (src is null) return;
 
-        var target = AdapterAtScreen(Control.MousePosition);
-        if (target is not null && !ReferenceEquals(target, src))
-            MoveCardBefore(src.PluginId, target.PluginId);   // 内部会重排
+        // ⚠ 必须排除「正在被拖的那张卡」：
+        //   预览是把这张卡挪到鼠标底下，所以松手时鼠标 100% 还在它自己身上，
+        //   不排除的话落点永远等于自己 → 永远走「归位」分支 → 拖了等于没拖。
+        var target = AdapterAtScreen(Control.MousePosition, exclude: src);
+        if (target is not null)
+            SwapCards(src.PluginId, target.PluginId);         // 内部会重排
         else
-            RelayoutCards();                                  // 拖着走了一圈又放下：归位
+            SetStatus("落在空白处，顺序未变");
     }
 
-    /// <summary>屏幕坐标落在哪张卡上；不在任何卡上返回 null。</summary>
-    private CardAdapter? AdapterAtScreen(Point screenPt)
+    /// <summary>屏幕坐标落在哪张卡上；不在任何卡上返回 null。exclude 用于跳过被拖的那张。</summary>
+    private CardAdapter? AdapterAtScreen(Point screenPt, CardAdapter? exclude = null)
     {
         foreach (var a in _plugins.Cards)
         {
+            if (ReferenceEquals(a, exclude)) continue;
             var c = a.Control;
             if (c is null || c.IsDisposed || !c.Visible) continue;
             if (c.RectangleToScreen(c.ClientRectangle).Contains(screenPt)) return a;
@@ -1274,20 +1281,19 @@ internal sealed class MainForm : Form, IPluginHost
     }
 
     /// <summary>
-    /// 把 src 插到 target 原来的位置。
-    /// 拖动排序是「插入」不是「交换」—— 交换会让被拖的卡跳来跳去，手感很怪。
+    /// 拖动放手：把 src 和 target **互换位置**（不是插入）。
+    ///
+    /// 用户明确要「其他卡片别动」—— 插入会让后面所有卡片顺移一格，一屏都在跳；
+    /// 交换只动这两张，其余纹丝不动，符合「只改被拖动那张的位置」。
     /// </summary>
-    private void MoveCardBefore(string srcId, string targetId)
+    private void SwapCards(string srcId, string targetId)
     {
         var cur = ApplyCardLayout(_plugins.Cards).Select(c => c.PluginId).ToList();
-        int from = cur.IndexOf(srcId);
-        int to = cur.IndexOf(targetId);
-        if (from < 0 || to < 0 || from == to) return;
+        int i = cur.IndexOf(srcId);
+        int j = cur.IndexOf(targetId);
+        if (i < 0 || j < 0 || i == j) return;
 
-        cur.RemoveAt(from);
-        if (from < to) to--;              // 拔掉之后，目标索引要前移一位
-        cur.Insert(to, srcId);
-
+        (cur[i], cur[j]) = (cur[j], cur[i]);
         _settings.CardOrder = cur;
         _settings.Save(AppDirectory);
         RelayoutCards();
@@ -1599,6 +1605,7 @@ internal sealed class SettingsForm : Form
 
         // ---- 卡片区布局 ----
         NumericUpDown? numCols = null;
+        NumericUpDown? numRows = null;
         if (string.IsNullOrEmpty(onlyPluginId))
         {
             Section("卡片区布局");
@@ -1610,6 +1617,15 @@ internal sealed class SettingsForm : Form
                 Width = 80,
             };
             Row("每行几列", numCols, "0 = 自动：≤3 张单列、4–8 张两列、再多三列。功能变多以后嫌排太长就手动填");
+
+            numRows = new NumericUpDown
+            {
+                Minimum = 0,
+                Maximum = 10,
+                Value = Math.Clamp(_s.CardRows, 0, 10),
+                Width = 80,
+            };
+            Row("最多几行", numRows, "0 = 自动（最多 3 行），超出的滚动看。想多露点日志就把这个调小");
         }
 
         // ---- 插件设置（默认可见项）----
@@ -1855,6 +1871,7 @@ internal sealed class SettingsForm : Form
                 _s.DisabledPlugins = _draftDisabled.ToList();
             }
             if (numCols is not null) _s.CardColumns = (int)numCols.Value;
+            if (numRows is not null) _s.CardRows = (int)numRows.Value;
 
             // —— 插件项：按绑定写回各自的 settings.json ——
             foreach (var (input, store, sc) in _bind)
