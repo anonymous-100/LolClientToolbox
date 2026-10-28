@@ -213,11 +213,21 @@ internal sealed class CardAdapter : ICard
     public event Action? Clicked;
     public event Action<bool>? AutoToggled;
 
+    /// <summary>长按开始拖动（宿主在这里记下「拖的是哪张卡」）。</summary>
+    public event EventHandler? DragStarted;
+    /// <summary>拖动中，参数是鼠标的屏幕坐标。</summary>
+    public event EventHandler<Point>? DragMoved;
+    /// <summary>松手放下。</summary>
+    public event EventHandler? DragDropped;
+
     /// <summary>由宿主在创建卡片后调用：把控件事件接到契约事件上。</summary>
     public void Wire()
     {
         _card.Click += (_, _) => Clicked?.Invoke();
         _card.AutoToggled += (_, _) => AutoToggled?.Invoke(_card.AutoOn);
+        _card.DragStarted += (_, _) => DragStarted?.Invoke(this, EventArgs.Empty);
+        _card.DragMoved += (_, pt) => DragMoved?.Invoke(this, pt);
+        _card.DragDropped += (_, _) => DragDropped?.Invoke(this, EventArgs.Empty);
     }
 
     private void Ui(Action a)
@@ -294,7 +304,11 @@ internal sealed class PluginManager
 
     // ---------- 加载 ----------
 
-    public void LoadAll(string pluginsRoot)
+    /// <param name="disabled">
+    /// 用户在设置里关掉的功能（插件 id）。**关掉 = 根本不加载**：
+    /// 不起线程、不订阅事件、也不会有卡片。比「只藏卡片」彻底，代价是要重启才生效。
+    /// </param>
+    public void LoadAll(string pluginsRoot, IReadOnlyCollection<string>? disabled = null)
     {
         if (!Directory.Exists(pluginsRoot))
         {
@@ -302,6 +316,7 @@ internal sealed class PluginManager
             return;
         }
 
+        var off = new HashSet<string>(disabled ?? Array.Empty<string>(), StringComparer.OrdinalIgnoreCase);
         PreloadSharedRuntime(pluginsRoot);
 
         foreach (var dir in Directory.GetDirectories(pluginsRoot).OrderBy(d => d, StringComparer.Ordinal))
@@ -323,6 +338,11 @@ internal sealed class PluginManager
             if (!m.Enabled)
             {
                 _log(LogLevel.Info, "插件", $"{m.Name} 已在清单里禁用（enabled=false）");
+                continue;
+            }
+            if (off.Contains(m.Id))
+            {
+                _log(LogLevel.Info, "插件", $"{m.Name} 已在设置里关掉，本次不加载");
                 continue;
             }
 

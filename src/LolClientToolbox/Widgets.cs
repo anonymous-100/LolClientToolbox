@@ -73,6 +73,31 @@ internal sealed class ActionCard : Button
     private bool _bouncing;
     private bool _bounceRail;   // 这一下弹的是开关那一侧还是功能区
     private float _bounceVal;
+
+    // ---------- 长按拖动排序（安卓桌面那套手感）----------
+    // 卡片本身就是个大按钮（点一下＝执行功能），所以要严格区分：
+    //   短按松手 → 点击，执行功能
+    //   按住 400ms → 进入拖拽待命，之后移动＝拖动、松手＝放下，全程不触发点击
+    private const int LongPressMs = 400;
+    private readonly System.Windows.Forms.Timer _longPress = new() { Interval = LongPressMs };
+    private bool _dragArmed;    // 长按已到位，进入拖拽
+    private bool _suppressClick; // 这一轮松手别再当成点击
+    private bool _dropHint;      // 别的卡片拖到我头上时的高亮
+
+    /// <summary>长按到位，可以开始拖了。</summary>
+    public event EventHandler? DragStarted;
+    /// <summary>拖拽中，参数为鼠标的屏幕坐标。</summary>
+    public event EventHandler<Point>? DragMoved;
+    /// <summary>松手放下（调用方在这里决定插到哪）。</summary>
+    public event EventHandler? DragDropped;
+
+    /// <summary>拖拽时高亮：「松手会插到这里」。</summary>
+    public void SetDropHint(bool on)
+    {
+        if (_dropHint == on) return;
+        _dropHint = on;
+        Invalidate();
+    }
     private const int BounceMs = 200;
 
     public ActionCard()
@@ -89,12 +114,28 @@ internal sealed class ActionCard : Button
         Cursor = Cursors.Hand;
         Font = T.Card();
         _bounce.Tick += (_, _) => TickBounce();
+        _longPress.Tick += (_, _) => ArmDrag();
     }
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { _bounce.Stop(); _bounce.Dispose(); }
+        if (disposing)
+        {
+            _bounce.Stop(); _bounce.Dispose();
+            _longPress.Stop(); _longPress.Dispose();
+        }
         base.Dispose(disposing);
+    }
+
+    /// <summary>长按到位：进入拖拽待命。之后移动是拖动、松手是放下，都不算点击。</summary>
+    private void ArmDrag()
+    {
+        _longPress.Stop();
+        if (_dragArmed || !_pressed) return;   // 已经松手了就别再进
+        _dragArmed = true;
+        _suppressClick = true;
+        Cursor = Cursors.SizeAll;
+        DragStarted?.Invoke(this, EventArgs.Empty);
     }
 
     private void BeginBounce(bool rail)
@@ -190,6 +231,13 @@ internal sealed class ActionCard : Button
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
+        // 拖拽中：把屏幕坐标交给宿主去算「现在悬在哪张卡上」
+        if (_dragArmed)
+        {
+            DragMoved?.Invoke(this, PointToScreen(e.Location));
+            return;
+        }
+
         var was = _railHover;
         _railHover = ShowAuto && RailRect().Contains(e.Location);
         if (was != _railHover) Invalidate();
@@ -220,22 +268,50 @@ internal sealed class ActionCard : Button
         // 两套点击区互不牵连：按住右边就不许把自己当成「功能被按下」
         if (ShowAuto && RailRect().Contains(e.Location)) _railPressed = true;
         else _pressed = true;
+
+        // 只有按在功能主体上才开始算长按；按开关不参与拖拽
+        if (e.Button == MouseButtons.Left && _pressed)
+        {
+            _dragArmed = false;
+            _suppressClick = false;
+            _longPress.Start();
+        }
+
         base.OnMouseDown(e);
         Invalidate();
     }
 
     protected override void OnMouseUp(MouseEventArgs e)
     {
+        _longPress.Stop();
+
         bool wasLeft = _pressed, wasRail = _railPressed;
         _pressed = false;
         _railPressed = false;
+
+        bool wasDrag = _dragArmed;
+        if (wasDrag)
+        {
+            _dragArmed = false;
+            Cursor = Cursors.Hand;
+        }
+
         base.OnMouseUp(e);
+        if (wasDrag) DragDropped?.Invoke(this, EventArgs.Empty);   // 先放下，再回弹
         if (wasLeft || wasRail) BeginBounce(wasRail);
         Invalidate();
     }
 
     protected override void OnClick(EventArgs e)
     {
+        // 刚拖完那一下不算点击：卡片主体本来就是「点一下执行功能」，
+        // 不拦的话每次拖动都会顺手触发一次功能（比如打开战绩窗口）。
+        if (_suppressClick)
+        {
+            _suppressClick = false;
+            return;
+        }
+
         var pt = PointToClient(MousePosition);
         if (ShowAuto && RailRect().Contains(pt))
         {
@@ -279,6 +355,14 @@ internal sealed class ActionCard : Button
             // 之前错用了和块一样的 Raised，缝直接隐形 —— 预览里看得见、程序里看不见，根子在这。
             // 整卡不再描边 —— 预览里没有这一圈，外轮廓由两块各自的边框拼出来
             T.Fill(g, T.BgSunken, path);
+        }
+
+        // 拖拽落点高亮：整卡描一圈强调色。比改底色醒目，也不会污染原有配色
+        if (_dropHint)
+        {
+            using var hp = new Pen(T.Accent, Math.Max(2f, P(2)));
+            using var hpath = T.Rounded(full, radius);
+            g.DrawPath(hp, hpath);
         }
 
         // 按哪边，哪边浮 —— 另一边完全不参与。

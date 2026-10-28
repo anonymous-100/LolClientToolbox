@@ -103,6 +103,13 @@ internal sealed class Settings
     /// </summary>
     public List<string> CardHidden { get; set; } = new();
 
+    /// <summary>
+    /// 在设置里关掉的功能（插件 id）。**关掉 = 启动时根本不加载**，比隐藏彻底：
+    /// 不占资源、不起线程、不订阅事件，卡片自然也没有。
+    /// 代价是要重启程序才生效 —— 插件本来就是启动时一次性加载的。
+    /// </summary>
+    public List<string> DisabledPlugins { get; set; } = new();
+
     /// <summary>JSON 里允许 // 注释和尾随逗号 —— config.json 是给人看的，必须能写注释。</summary>
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -130,6 +137,7 @@ internal sealed class Settings
                 // 手改配置时可能把数组写成 null，补成空表（空 = 走默认顺序 / 不隐藏任何卡片）
                 if (s.CardOrder is null) s.CardOrder = new List<string>();
                 if (s.CardHidden is null) s.CardHidden = new List<string>();
+                if (s.DisabledPlugins is null) s.DisabledPlugins = new List<string>();
 
                 // 升级过版本、config 里缺新字段时补存一次，让用户看到完整的配置项
                 var raw = File.ReadAllText(path);
@@ -163,6 +171,7 @@ internal sealed class Settings
         ["ShowDevOptions"] = "true = 设置窗口显示「开发者选项」入口（含 Ctrl+` 快捷键）。排障时才开",
         ["CardOrder"] = "卡片显示顺序（插件 id 数组）。空 = 按插件自己的 order 排；没列到的插件自动排到末尾",
         ["CardHidden"] = "隐藏的卡片（插件 id 数组）。隐藏不等于禁用：插件照跑，只是不显示卡片",
+        ["DisabledPlugins"] = "关掉的功能（插件 id 数组）。关掉 = 启动时完全不加载，需重启程序生效",
     };
 
     /// <summary>

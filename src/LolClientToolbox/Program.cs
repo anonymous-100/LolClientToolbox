@@ -112,6 +112,9 @@ internal sealed class MainForm : Form, IPluginHost
     private const int CardCols = 2;
     private const int CardGap = 8;
 
+    /// <summary>正在被长按拖动的那张卡（安卓桌面式排序）。</summary>
+    private CardAdapter? _dragSrc;
+
     private static readonly string AppDirectory =
         Path.GetDirectoryName(Environment.ProcessPath ?? Application.ExecutablePath) ?? AppContext.BaseDirectory;
 
@@ -258,7 +261,7 @@ internal sealed class MainForm : Form, IPluginHost
         // 先把程序目录写进日志：仓库里可能同时存在 .dev / .dev-new / dist 好几份构建，
         // 跑错实例时「功能明明写了却不生效」极难排查（2026-10-25 就踩过一次）。
         Log(LogKind.Info, "启动", $"程序目录 {AppDirectory}");
-        _plugins.LoadAll(Path.Combine(AppDirectory, "plugins"));
+        _plugins.LoadAll(Path.Combine(AppDirectory, "plugins"), _settings.DisabledPlugins);
 
         RelayoutCards();
 
@@ -388,8 +391,7 @@ internal sealed class MainForm : Form, IPluginHost
                         // 测试专用：临时翻开开发者选项开关（仅内存，不落盘）——
                         // 否则按钮不可见，而 PerformClick 走 CanSelect，不可见时点了没反应
                         _settings.ShowDevOptions = true;
-                        dlg = new SettingsForm(_settings, _plugins.PluginSections(),
-                                               cardPluginIds: _plugins.Cards.Select(c => c.PluginId).ToList());
+                        dlg = new SettingsForm(_settings, _plugins.PluginSections());
                         dlg.StartPosition = FormStartPosition.Manual;
                         dlg.Location = new Point(-3000, -3000);
                         dlg.ShowInTaskbar = false;
@@ -983,8 +985,7 @@ internal sealed class MainForm : Form, IPluginHost
 
     private void OpenSettings()
     {
-        using var dlg = new SettingsForm(_settings, _plugins.PluginSections(),
-                                         cardPluginIds: _plugins.Cards.Select(c => c.PluginId).ToList());
+        using var dlg = new SettingsForm(_settings, _plugins.PluginSections());
         if (dlg.ShowDialog(this) == DialogResult.OK)
         {
             _lcu.ClientPathHint = _settings.ClientPathHint;
@@ -1144,6 +1145,15 @@ internal sealed class MainForm : Form, IPluginHost
                 c.Location = new Point(T.PadOuter + (i % CardCols) * (cardW + CardGap),
                                        T.Sp3 + (i / CardCols) * (T.CardH + CardGap));
                 c.ContextMenuStrip = BuildCardMenu(a);
+
+                // 长按拖动排序：先解绑再绑，避免每次重排累积一堆处理器
+                a.DragStarted -= CardDragStarted;
+                a.DragStarted += CardDragStarted;
+                a.DragMoved -= CardDragMoved;
+                a.DragMoved += CardDragMoved;
+                a.DragDropped -= CardDragDropped;
+                a.DragDropped += CardDragDropped;
+
                 _cardsHost.Controls.Add(c);
             }
 
@@ -1188,6 +1198,72 @@ internal sealed class MainForm : Form, IPluginHost
         _settings.CardOrder = cur;
         _settings.Save(AppDirectory);
         RelayoutCards();
+    }
+
+    // ---------- 长按拖动排序（安卓桌面那套） ----------
+
+    /// <summary>长按到位：记下拖的是哪张卡。</summary>
+    private void CardDragStarted(object? sender, EventArgs e)
+    {
+        _dragSrc = sender as CardAdapter;
+        if (_dragSrc is null) return;
+        SetStatus("松手放到目标位置即可调整顺序");
+    }
+
+    /// <summary>拖动中：把鼠标底下那张卡标成落点，其余取消高亮。</summary>
+    private void CardDragMoved(object? sender, Point screenPt)
+    {
+        if (_dragSrc is null) return;
+        var target = AdapterAtScreen(screenPt);
+        foreach (var a in _plugins.Cards)
+            a.Control?.SetDropHint(!ReferenceEquals(a, _dragSrc) && ReferenceEquals(a, target));
+    }
+
+    /// <summary>松手：插到落点那张卡的位置。落在空白处就不动。</summary>
+    private void CardDragDropped(object? sender, EventArgs e)
+    {
+        var src = _dragSrc;
+        _dragSrc = null;
+        foreach (var a in _plugins.Cards) a.Control?.SetDropHint(false);
+
+        if (src is null) return;
+        var target = AdapterAtScreen(Control.MousePosition);
+        if (target is null || ReferenceEquals(target, src)) return;
+
+        MoveCardBefore(src.PluginId, target.PluginId);
+    }
+
+    /// <summary>屏幕坐标落在哪张卡上；不在任何卡上返回 null。</summary>
+    private CardAdapter? AdapterAtScreen(Point screenPt)
+    {
+        foreach (var a in _plugins.Cards)
+        {
+            var c = a.Control;
+            if (c is null || c.IsDisposed || !c.Visible) continue;
+            if (c.RectangleToScreen(c.ClientRectangle).Contains(screenPt)) return a;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// 把 src 插到 target 原来的位置。
+    /// 拖动排序是「插入」不是「交换」—— 交换会让被拖的卡跳来跳去，手感很怪。
+    /// </summary>
+    private void MoveCardBefore(string srcId, string targetId)
+    {
+        var cur = ApplyCardLayout(_plugins.Cards).Select(c => c.PluginId).ToList();
+        int from = cur.IndexOf(srcId);
+        int to = cur.IndexOf(targetId);
+        if (from < 0 || to < 0 || from == to) return;
+
+        cur.RemoveAt(from);
+        if (from < to) to--;              // 拔掉之后，目标索引要前移一位
+        cur.Insert(to, srcId);
+
+        _settings.CardOrder = cur;
+        _settings.Save(AppDirectory);
+        RelayoutCards();
+        SetStatus("✓ 顺序已保存");
     }
 
     /// <summary>
@@ -1375,26 +1451,12 @@ internal sealed class SettingsForm : Form
     private readonly List<(Control Input, IPluginSettings Store, SettingSchema Schema)> _bind = new();
     private Action? _toggleDev;   // 由构造函数末尾赋值，供快捷键调用
 
-    // 卡片管理的「草稿」：只在点保存时写回 _s，点取消就当没改过
-    private List<string> _draftOrder = new();
-    private HashSet<string> _draftHidden = new(StringComparer.OrdinalIgnoreCase);
+    // 功能管理的「草稿」：点保存才写回 _s，点取消就当没改过
+    private HashSet<string> _draftDisabled = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>
-    /// 真正注册了卡片的插件 id。**插件数 ≠ 卡片数** —— 像 watchvideo 是纯服务插件，
-    /// 只给「看视频（自动）」提供切窗能力，自己不画卡片。卡片管理里列它只会让人困惑
-    /// （「我隐藏了怎么没变化」），所以要用这个集合过滤。
-    /// </summary>
-    private readonly HashSet<string> _cardPluginIds;
-
-    public SettingsForm(Settings s, List<PluginSettingsSection> sections,
-                        string? onlyPluginId = null,
-                        IReadOnlyCollection<string>? cardPluginIds = null)
+    public SettingsForm(Settings s, List<PluginSettingsSection> sections, string? onlyPluginId = null)
     {
         _s = s;
-        // 没传就退化成「每个插件都有卡片」——只在单插件设置窗里发生，那种情况下不显示卡片管理
-        _cardPluginIds = cardPluginIds is null
-            ? new HashSet<string>(sections.Select(x => x.PluginId), StringComparer.OrdinalIgnoreCase)
-            : new HashSet<string>(cardPluginIds, StringComparer.OrdinalIgnoreCase);
         // 右键某张卡片进来的：只渲染这个插件的分区，别的都不显示
         _sections = string.IsNullOrEmpty(onlyPluginId)
             ? sections
@@ -1434,20 +1496,18 @@ internal sealed class SettingsForm : Form
             host.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         }
 
-        // ---- 卡片管理（顺序 + 显隐）----
-        // 只在完整设置窗里出现：右键某个插件进设置时改动会不完整，所以不显示。
+        // ---- 功能管理（启用 / 关闭）----
+        // 管的是「功能」不是「卡片」：纯服务插件（如 watchvideo）也列在这里 ——
+        // 它虽然不画卡片，但关掉它，「看视频（自动）」就切不了窗口了。
+        // 卡片排布是另一回事：在主界面上长按卡片拖动。
+        // 只在完整设置窗里出现；右键某个插件进设置时不显示（那样改不全）。
         if (string.IsNullOrEmpty(onlyPluginId) && _sections.Count > 0)
         {
-            Section("卡片管理 · 顺序与显示");
+            Section("功能 · 启用 / 关闭");
 
-            // 只收真正有卡片的插件：纯服务插件（如 watchvideo）不出现在这里
-            _draftOrder = OrderedSections()
-                .Where(x => _cardPluginIds.Contains(x.PluginId))
-                .Select(x => x.PluginId)
-                .ToList();
-            _draftHidden = new HashSet<string>(_s.CardHidden, StringComparer.OrdinalIgnoreCase);
+            _draftDisabled = new HashSet<string>(_s.DisabledPlugins, StringComparer.OrdinalIgnoreCase);
 
-            var cardBox = new FlowLayoutPanel
+            var listBox = new FlowLayoutPanel
             {
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
@@ -1457,18 +1517,14 @@ internal sealed class SettingsForm : Form
                 Margin = new Padding(0),
             };
 
-            void RebuildCards()
+            void RebuildList()
             {
-                cardBox.SuspendLayout();
+                listBox.SuspendLayout();
                 try
                 {
-                    cardBox.Controls.Clear();
-                    foreach (var id in _draftOrder.ToList())
+                    listBox.Controls.Clear();
+                    foreach (var sec in OrderedSections())
                     {
-                        var sec = _sections.FirstOrDefault(x => x.PluginId == id);
-                        if (sec is null) continue;                  // 插件被删了：跳过
-                        if (!_cardPluginIds.Contains(id)) continue; // 没有卡片的纯服务插件：跳过
-
                         var row = new FlowLayoutPanel
                         {
                             FlowDirection = FlowDirection.LeftToRight,
@@ -1478,66 +1534,36 @@ internal sealed class SettingsForm : Form
                             Margin = new Padding(0, 0, 0, 4),
                             BackColor = T.BgBase,
                         };
-                        var name = new Label
+                        var on = new CheckBox
                         {
                             Text = sec.PluginName,
-                            Width = 220, Height = 28,
-                            TextAlign = ContentAlignment.MiddleLeft,
+                            Checked = !_draftDisabled.Contains(sec.PluginId),
+                            Width = 320, Height = 28,
                             ForeColor = T.TxPrimary, Font = T.Body(),
+                            Tag = sec.PluginId,
                         };
-
-                        Button Arrow(string glyph)
+                        on.CheckedChanged += (_, _) =>
                         {
-                            var b = new Button
-                            {
-                                Text = glyph, Width = 34, Height = 28,
-                                FlatStyle = FlatStyle.Flat, BackColor = T.BgRaised,
-                                ForeColor = T.TxSecondary, Cursor = Cursors.Hand,
-                            };
-                            b.FlatAppearance.BorderColor = T.BdStrong;
-                            return b;
-                        }
-
-                        var up = Arrow("▲");
-                        up.Click += (_, _) => { MoveDraft(id, -1); RebuildCards(); };
-
-                        var down = Arrow("▼");
-                        down.Click += (_, _) => { MoveDraft(id, +1); RebuildCards(); };
-
-                        var show = new CheckBox
-                        {
-                            Text = "显示",
-                            Checked = !_draftHidden.Contains(id),
-                            Width = 74, Height = 28,
-                            ForeColor = T.TxSecondary, Font = T.Body(),
-                            Margin = new Padding(10, 0, 0, 0),
+                            if (on.Checked) _draftDisabled.Remove(sec.PluginId);
+                            else _draftDisabled.Add(sec.PluginId);
                         };
-                        show.CheckedChanged += (_, _) =>
-                        {
-                            if (show.Checked) _draftHidden.Remove(id);
-                            else _draftHidden.Add(id);
-                        };
-
-                        row.Controls.Add(name);
-                        row.Controls.Add(up);
-                        row.Controls.Add(down);
-                        row.Controls.Add(show);
-                        cardBox.Controls.Add(row);
+                        row.Controls.Add(on);
+                        listBox.Controls.Add(row);
                     }
                 }
                 finally
                 {
-                    cardBox.ResumeLayout();
+                    listBox.ResumeLayout();
                 }
             }
 
-            RebuildCards();
-            AutoBlock(tbl, cardBox);
+            RebuildList();
+            AutoBlock(tbl, listBox);
 
             AutoBlock(tbl, new Label
             {
-                Text = "取消勾选只是不显示卡片，插件照常工作；新装的插件会自动排到末尾",
-                AutoSize = false, Height = 22, Dock = DockStyle.Top,
+                Text = "关掉的功能不会加载（不占资源、不起线程），保存后需要重启程序才生效。\n卡片顺序不在这里调 —— 在主界面上长按卡片拖动。",
+                AutoSize = false, Height = 38, Dock = DockStyle.Top,
                 ForeColor = T.TxTertiary, Font = T.Meta(),
                 Margin = new Padding(0, 2, 0, T.Sp2),
             });
@@ -1780,11 +1806,10 @@ internal sealed class SettingsForm : Form
             _s.ClientPathHint = tbPath.Text.Trim();
             _s.PressStrength = tbStrength.Value;
 
-            // —— 卡片顺序与显隐（右键单插件进来时不动它，避免只写了一半）——
-            if (string.IsNullOrEmpty(onlyPluginId) && _draftOrder.Count > 0)
+            // —— 功能开关（右键单插件进来时不动，避免只写了一半）——
+            if (string.IsNullOrEmpty(onlyPluginId) && _sections.Count > 0)
             {
-                _s.CardOrder = _draftOrder;
-                _s.CardHidden = _draftHidden.ToList();
+                _s.DisabledPlugins = _draftDisabled.ToList();
             }
 
             // —— 插件项：按绑定写回各自的 settings.json ——
@@ -1905,15 +1930,6 @@ internal sealed class SettingsForm : Form
             .ThenBy(t => t.idx)
             .Select(t => t.sec)
             .ToList();
-    }
-
-    /// <summary>草稿里把某张卡片挪一位（点保存才真正生效）。</summary>
-    private void MoveDraft(string pluginId, int delta)
-    {
-        int i = _draftOrder.IndexOf(pluginId);
-        int j = i + delta;
-        if (i < 0 || j < 0 || j >= _draftOrder.Count) return;   // 已在头/尾
-        (_draftOrder[i], _draftOrder[j]) = (_draftOrder[j], _draftOrder[i]);
     }
 
     /// <summary>
