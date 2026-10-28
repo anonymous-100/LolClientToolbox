@@ -85,6 +85,7 @@ internal sealed class MainForm : Form, IPluginHost
     private readonly Label _stDiag;
     private readonly Panel _statusPanel;
     private readonly LogList _log;
+    private Panel? _logHost;   // 日志面板：算「最多能显示几行」时要它的高度
     private readonly ToolTip _tip = new();
     private LcuWatcher? _watcher;
 
@@ -233,19 +234,18 @@ internal sealed class MainForm : Form, IPluginHost
         _statusPanel.Controls.Add(_stPhaseBig);
         _statusPanel.Controls.Add(connRow);
 
-        // ---------- 运行日志：固定 4 行 ----------
+        // ---------- 运行日志：默认 4 行，行数可配 ----------
         // 只在「有东西变了」时记一行，并标出上一阶段停留多久。
         //
-        // 高度固定 4 行贴底：日志是「看一眼最近几条」的东西，不该跟卡片抢空间。
-        // （2026-10-28 用户：日志区这么大不行，让卡片区占空位 —— 卡片区改成 Fill 之后，
-        //  日志只要留够看最近几条就行。）
+        // 日志是「看一眼最近几条」的东西，不该跟卡片抢空间，所以行数写死成设置项
+        // （默认 4 行，设置里能调）。面板本身 Fill 撑到状态栏，但只渲染 N 行 ——
+        // 这样卡片区高度变了，日志不会跟着变长变短。
         var logPanel = new Panel
         {
-            // Fill：吃掉卡片区剩下的高度。卡片区高度由网格算出来（含那一行留白），
-            // 所以卡片和日志是紧挨着的，中间不会空出一块背景色（2026-10-28 用户要求）。
             Dock = DockStyle.Fill,
             BackColor = Bg, Padding = new Padding(T.PadOuter, 0, T.PadOuter, 0),
         };
+        _logHost = logPanel;
         var logHead = new Panel { Dock = DockStyle.Top, Height = 26, BackColor = Bg };
         var logTitle = new Label
         {
@@ -259,9 +259,17 @@ internal sealed class MainForm : Form, IPluginHost
         };
         logHead.Controls.Add(logNote);
         logHead.Controls.Add(logTitle);
-        _log = new LogList { Dock = DockStyle.Fill };
+        // 日志行数可配（设置 → 卡片区布局下方），默认 4 行。
+        // 高度自己定、Dock=Top：面板剩下多少高度都只渲染这么多行，不会因为窗口高就变长。
+        _log = new LogList
+        {
+            Dock = DockStyle.Top,
+            Height = T.LogRowH * Math.Clamp(_settings.LogRows, 1, 20),
+        };
         logPanel.Controls.Add(_log);
         logPanel.Controls.Add(logHead);
+        // 卡片区高度一变（改列数/行数/装插件），窗口一变，可用高度就变了 —— 重算日志能放几行
+        logPanel.SizeChanged += (_, _) => ApplyLogRows();
 
         // ---------- 卡片区：网格布局 ----------
         // 卡片由各插件在 Init 里 RegisterCard 注册，顺序由 config.json 的 CardOrder 决定。
@@ -310,6 +318,7 @@ internal sealed class MainForm : Form, IPluginHost
         _plugins.LoadAll(Path.Combine(AppDirectory, "plugins"), _settings.DisabledPlugins);
 
         RelayoutCards();
+        ApplyLogRows();     // 卡片区高度定了才知道日志能放几行
 
         // ---------- 底部 ----------
         var footer = new Panel { Dock = DockStyle.Bottom, Height = 76, BackColor = PanelBg, Padding = new Padding(T.PadOuter, 8, T.PadOuter, 8) };
@@ -1043,6 +1052,7 @@ internal sealed class MainForm : Form, IPluginHost
             // 插件设置也在同一个对话框里保存，通知插件把卡片状态同步过去
             _plugins.NotifySettingsChanged();
             ApplyPressStrength();
+            ApplyLogRows();           // 日志行数可能改了，重设高度
             RelayoutCards();          // 卡片管理的顺序/显隐可能改了，重新摆放
             SetStatus("✓ 参数已保存");
         }
@@ -1053,6 +1063,21 @@ internal sealed class MainForm : Form, IPluginHost
     {
         foreach (var a in _plugins.Cards)
             a.Control?.SetPressStrength(_settings.PressStrength);
+    }
+
+    /// <summary>
+    /// 按设置里的行数重设日志高度（启动、保存设置、窗口大小变化都调）。
+    ///
+    /// 要卡上限：设置写 6 行、窗口只剩 4 行的高度时，硬撑会让最后一行被状态栏切掉。
+    /// 所以「设置的行数」实际是上限，窗口放不下就少显示几行，不会画出边界外。
+    /// </summary>
+    private void ApplyLogRows()
+    {
+        int want = Math.Clamp(_settings.LogRows, 1, 20);
+        int availPx = (_logHost?.ClientSize.Height ?? want * T.LogRowH) - 26;   // 26 = 标题行
+        // 取整到「整行」：不然窗口高度除不尽时会露出半行，看着像被切掉
+        int fit = Math.Max(1, availPx / T.LogRowH);
+        _log.Height = Math.Min(want, fit) * T.LogRowH;
     }
 
     /// <summary>
@@ -1672,17 +1697,19 @@ internal sealed class SettingsForm : Form
             });
         }
 
-        // ---- 卡片区布局 ----
+        // ---- 布局（卡片网格 + 日志行数）----
         NumericUpDown? numCols = null;
         NumericUpDown? numRows = null;
+        NumericUpDown? numLog = null;
         if (string.IsNullOrEmpty(onlyPluginId))
         {
             Section("卡片区布局");
 
-            // 「填 0 就是自动」这种约定太隐晦 —— 没人会主动去猜 0 的含义，
-            // 所以给一个明确的「自动」按钮；右边的灰字实时告诉你此刻到底是多少，
-            // 省得用户按完了还得回主界面数格子才知道发生了什么。
-            (Control Box, Label State) NumWithAuto(NumericUpDown num, Func<int> autoValue, string unit)
+            // 「填 0 就是自动」这种约定太隐晦，改成胶囊开关（跟卡片右边的自动开关同一个造型）。
+            // 开着 = 自动，数字框灰掉；关掉 = 手动，数字框可改。
+            // 状态文字跟着实时变，省得用户按完还要回主界面数格子才知道结果。
+            (Action Sync, Control Box) AutoRow(NumericUpDown num, Func<int> autoValue, string unit,
+                                               Action? onChanged = null)
             {
                 var box = new FlowLayoutPanel
                 {
@@ -1693,72 +1720,117 @@ internal sealed class SettingsForm : Form
                     Margin = new Padding(0),
                     BackColor = T.BgBase,
                 };
-                num.Width = 58;
+
+                var toggle = new CapsuleToggle
+                {
+                    Checked = num.Value == 0,
+                    Margin = new Padding(0, (T.ControlH - 24) / 2, 10, 0),
+                };
+
+                num.Width = 56;
                 num.Height = T.ControlH;
                 num.TextAlign = HorizontalAlignment.Center;
-
-                var btn = new Button
-                {
-                    Text = "自动",
-                    Width = 52, Height = T.ControlH,
-                    FlatStyle = FlatStyle.Flat,
-                    BackColor = T.BgOverlay, ForeColor = T.TxSecondary,
-                    Font = T.Meta(), Cursor = Cursors.Hand,
-                    Margin = new Padding(6, 0, 10, 0),
-                };
-                btn.FlatAppearance.BorderColor = T.BdStrong;
+                num.BackColor = T.BgSunken;      // 不设就是系统白，跟暗色主题不是一家人
+                num.ForeColor = T.TxPrimary;
 
                 var state = new Label
                 {
-                    AutoSize = false, Width = 120, Height = T.ControlH,
+                    AutoSize = false, Width = 104, Height = T.ControlH,
                     TextAlign = ContentAlignment.MiddleLeft,
-                    ForeColor = T.TxTertiary, Font = T.Meta(),
-                    Margin = new Padding(0),
+                    Font = T.Meta(),
+                    Margin = new Padding(8, 0, 0, 0),
                 };
 
+                bool syncing = false;
                 void Sync()
                 {
-                    bool auto = num.Value == 0;
-                    state.Text = auto ? $"自动 · {autoValue()} {unit}" : $"手动 · {(int)num.Value} {unit}";
-                    btn.ForeColor = auto ? T.Accent : T.TxSecondary;   // 当前就是自动时按钮变金
+                    if (syncing) return;
+                    syncing = true;
+                    try
+                    {
+                        bool auto = toggle.Checked;
+                        if (auto && num.Value != 0) num.Value = 0;
+                        if (!auto && num.Value == 0)
+                            num.Value = Math.Clamp(autoValue(), num.Minimum, num.Maximum);
+                        num.Enabled = !auto;
+                        state.Text = auto ? $"自动 · {autoValue()} {unit}" : $"手动 · {(int)num.Value} {unit}";
+                        state.ForeColor = auto ? T.TxTertiary : T.TxSecondary;
+                    }
+                    finally
+                    {
+                        syncing = false;
+                    }
+                    onChanged?.Invoke();
                 }
 
-                btn.Click += (_, _) => { num.Value = 0; Sync(); };
+                toggle.CheckedChanged += (_, _) => Sync();
                 num.ValueChanged += (_, _) => Sync();
 
+                box.Controls.Add(toggle);
                 box.Controls.Add(num);
-                box.Controls.Add(btn);
                 box.Controls.Add(state);
                 Sync();
-                return (box, state);
+                return (Sync, box);
             }
 
-            // 自动列数的规则跟主界面同一套（ColumnsFor），这里只是把它显示出来
+            // 自动列数：≤3 个功能单列、4–8 个两列、更多三列
             int AutoCols() => _cardCount <= 3 ? 1 : _cardCount <= 8 ? 2 : 3;
-            // 自动行数：刚好铺满时补一行空格（留白 + 拖动落点），没铺满就不补。
-            // 例：3 列 6 张 → 3 行；3 列 7 张 → 3 行
-            int AutoRows()
+
+            // 自动行数：放下所有卡片，最后一行正好铺满时再补一行（留白 + 拖动落点）。
+            // ⚠ 这里必须按**当前实际列数**算：手填 3 列时自动行数就是 3 行，
+            //   早先写成「按自动列数算」，于是手动 3 列却显示「自动 · 4 行」（2026-10-28 用户报的 bug）。
+            int AutoRows(int cols)
             {
-                int c = AutoCols();
+                int c = Math.Max(1, cols);
                 int need = Math.Max(1, (_cardCount + c - 1) / c);
                 return need + (_cardCount > 0 && _cardCount % c == 0 ? 1 : 0);
             }
 
+            int EffectiveCols() => numCols!.Value > 0 ? (int)numCols.Value : AutoCols();
+
+            // 0 = 自动（胶囊开关开着的时候），1–6 = 手动
             numCols = new NumericUpDown
             {
                 Minimum = 0, Maximum = 6,
                 Value = Math.Clamp(_s.CardColumns, 0, 6),
             };
-            var colsBox = NumWithAuto(numCols, AutoCols, "列");
-            Row("每行几列", colsBox.Box, "自动：≤3 个功能单列、4–8 个两列、更多三列。也可以手动填 1–6");
+
+            Action syncRows = () => { };
+            var colsRow = AutoRow(numCols, AutoCols, "列", onChanged: () => syncRows());
+            Row("每行几列", colsRow.Box, "自动：≤3 个功能单列、4–8 个两列、更多三列。关掉开关就能手填 1–6");
 
             numRows = new NumericUpDown
             {
                 Minimum = 0, Maximum = 10,
                 Value = Math.Clamp(_s.CardRows, 0, 10),
             };
-            var rowsBox = NumWithAuto(numRows, AutoRows, "行");
-            Row("显示几行", rowsBox.Box, "自动 = 放下所有卡片；如果最后一行正好铺满，就再补一行空着（留白，也方便拖过去调位置）");
+            var rowsRow = AutoRow(numRows, () => AutoRows(EffectiveCols()), "行");
+            syncRows = rowsRow.Sync;
+            Row("显示几行", rowsRow.Box,
+                "自动 = 放下所有卡片；最后一行正好铺满时再补一行空着（留白，也方便拖过去调位置）");
+
+            // ---- 运行日志 ----
+            Section("运行日志");
+            numLog = new NumericUpDown
+            {
+                Minimum = 1, Maximum = 20,
+                Value = Math.Clamp(_s.LogRows, 1, 20),
+                Width = 56,
+                Height = T.ControlH,
+                TextAlign = HorizontalAlignment.Center,
+                BackColor = T.BgSunken, ForeColor = T.TxPrimary,
+            };
+            var logBox = new FlowLayoutPanel
+            {
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                Margin = new Padding(0),
+                BackColor = T.BgBase,
+            };
+            logBox.Controls.Add(numLog);
+            Row("显示行数", logBox, "默认 4 行。日志只记「有变化的事」，调大能多留几条");
         }
 
         // ---- 插件设置（默认可见项）----
@@ -2005,6 +2077,7 @@ internal sealed class SettingsForm : Form
             }
             if (numCols is not null) _s.CardColumns = (int)numCols.Value;
             if (numRows is not null) _s.CardRows = (int)numRows.Value;
+            if (numLog is not null) _s.LogRows = Math.Clamp((int)numLog.Value, 1, 20);
 
             // —— 插件项：按绑定写回各自的 settings.json ——
             foreach (var (input, store, sc) in _bind)

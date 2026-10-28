@@ -717,3 +717,68 @@ internal sealed class LogList : ListBox
             ControlPaint.DrawFocusRectangle(g, row);
     }
 }
+
+/// <summary>
+/// 胶囊开关（设置窗用）。
+///
+/// 为什么不用 CheckBox：右边卡片上的「自动」就是一个胶囊开关，设置里再用勾选框的话，
+/// 同一个概念两种外观，人会以为不是一回事（2026-10-28 用户要求）。
+/// 也不用现成的 TrackBar：那是滑杆，读不出「开/关」。
+/// </summary>
+internal sealed class CapsuleToggle : Control
+{
+    private bool _on;
+
+    public event EventHandler? CheckedChanged;
+
+    // 设计器序列化默认值：不加这条，WinForms 分析器会报 WFO1000
+    // （这控件不在设计器里拖，但要过分析器这一关）
+    [System.ComponentModel.DefaultValue(false)]
+    public bool Checked
+    {
+        get => _on;
+        set
+        {
+            if (_on == value) return;
+            _on = value;
+            Invalidate();
+            CheckedChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    public CapsuleToggle()
+    {
+        SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
+                 | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+        Size = new Size(44, 24);
+        Cursor = Cursors.Hand;
+        BackColor = T.BgBase;
+        TabStop = false;
+    }
+
+    protected override void OnClick(EventArgs e)
+    {
+        Checked = !Checked;
+        base.OnClick(e);
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.Clear(BackColor);
+
+        int h = Math.Min(Height, 24);
+        int w = Math.Min(Width, 44);
+        var track = new Rectangle((Width - w) / 2, (Height - h) / 2, w, h);
+
+        using (var path = T.Rounded(track, h / 2))
+        using (var b = new SolidBrush(_on ? T.Accent : T.BdStrong))
+            g.FillPath(b, path);
+
+        int d = h - 6;                                    // 圆钮直径
+        int kx = _on ? track.Right - d - 3 : track.Left + 3;
+        using (var kb = new SolidBrush(_on ? T.BgBase : T.TxSecondary))
+            g.FillEllipse(kb, kx, track.Top + 3, d, d);
+    }
+}

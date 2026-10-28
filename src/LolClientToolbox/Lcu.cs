@@ -117,6 +117,12 @@ internal sealed class Settings
     /// </summary>
     public int CardRows { get; set; } = 0;
 
+    /// <summary>
+    /// 运行日志显示几行（默认 4）。日志只记「有变化的事」，4 行够看最近几条；
+    /// 窗口高想多看几行就在设置里调大。
+    /// </summary>
+    public int LogRows { get; set; } = 4;
+
     /// <summary>JSON 里允许 // 注释和尾随逗号 —— config.json 是给人看的，必须能写注释。</summary>
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -144,6 +150,7 @@ internal sealed class Settings
                 // 手改配置时可能把数组写成 null，补成空表（空 = 走默认顺序 / 不隐藏任何卡片）
                 if (s.CardOrder is null) s.CardOrder = new List<string>();
                 if (s.DisabledPlugins is null) s.DisabledPlugins = new List<string>();
+                if (s.LogRows < 1 || s.LogRows > 20) s.LogRows = 4;   // 手改成 0/负数就当没填
 
                 // 升级过版本、config 里缺新字段时补存一次，让用户看到完整的配置项
                 var raw = File.ReadAllText(path);
@@ -179,6 +186,7 @@ internal sealed class Settings
         ["DisabledPlugins"] = "关掉的功能（插件 id 数组）。关掉 = 启动时完全不加载，需重启程序生效",
         ["CardColumns"] = "卡片显示几列。0 = 自动（≤3 张单列 / 4-8 张两列 / 更多三列），也可以手动填 1-6",
         ["CardRows"] = "卡片区显示几行。0 = 自动（放下所有卡片；最后一行正好铺满时再补一行空格当留白）",
+        ["LogRows"] = "运行日志显示几行，默认 4",
     };
 
     /// <summary>
