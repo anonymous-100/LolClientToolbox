@@ -1109,17 +1109,30 @@ internal sealed class MainForm : Form, IPluginHost
     }
 
     /// <summary>
-    /// 按当前配置重排卡片区。首次布局、右键调顺序、设置窗改显隐，都走这里。
-    /// 先摘掉所有卡片控件再按新顺序放回去，所以隐藏的卡片自然就消失了。
+    /// 本次该用几列：设置里填了就用填的（1–6）；填 0 按卡片数自动算。
+    /// 自动规则：≤3 张单列（卡宽一点好读）、4–8 张两列、9 张以上三列。
+    /// </summary>
+    private int ColumnsFor(int count)
+    {
+        if (_settings.CardColumns > 0) return Math.Clamp(_settings.CardColumns, 1, 6);
+        if (count <= 3) return 1;
+        if (count <= 8) return 2;
+        return 3;
+    }
+
+    /// <summary>
+    /// 按当前配置重排卡片区。首次布局、拖动排序、设置窗改显隐，都走这里。
+    /// 先摘掉所有卡片控件再按新顺序放回去，所以被关掉的功能自然就消失了。
     /// </summary>
     private void RelayoutCards()
     {
         if (_cardsHost is null) return;
 
         var ordered = ApplyCardLayout(_plugins.Cards);
+        int cols = ColumnsFor(ordered.Count);
         int innerW = Math.Max(320, ClientSize.Width - T.PadOuter * 2);
-        int cardW = (innerW - CardGap * (CardCols - 1)) / CardCols;
-        int rows = (ordered.Count + CardCols - 1) / CardCols;
+        int cardW = (innerW - CardGap * (cols - 1)) / cols;
+        int rows = (ordered.Count + cols - 1) / cols;
         int contentH = rows == 0 ? 0 : rows * T.CardH + (rows - 1) * CardGap;
         bool allHidden = ordered.Count == 0;
 
@@ -1142,8 +1155,8 @@ internal sealed class MainForm : Form, IPluginHost
                 c.Dock = DockStyle.None;
                 c.Margin = new Padding(0);
                 c.Size = new Size(cardW, T.CardH);
-                c.Location = new Point(T.PadOuter + (i % CardCols) * (cardW + CardGap),
-                                       T.Sp3 + (i / CardCols) * (T.CardH + CardGap));
+                c.Location = new Point(T.PadOuter + (i % cols) * (cardW + CardGap),
+                                       T.Sp3 + (i / cols) * (T.CardH + CardGap));
                 c.ContextMenuStrip = BuildCardMenu(a);
 
                 // 长按拖动排序：先解绑再绑，避免每次重排累积一堆处理器
@@ -1210,16 +1223,29 @@ internal sealed class MainForm : Form, IPluginHost
         SetStatus("松手放到目标位置即可调整顺序");
     }
 
-    /// <summary>拖动中：把鼠标底下那张卡标成落点，其余取消高亮。</summary>
+    /// <summary>
+    /// 拖动中：① 让被拖的卡片跟着鼠标走（这就是「预览」，不用截图/悬浮窗 ——
+    /// 直接改这张卡的 Location 最稳，也不会闪）；② 把鼠标底下那张卡标成落点。
+    /// 这期间其他卡片位置一概不动，只有松手才重排。
+    /// </summary>
     private void CardDragMoved(object? sender, Point screenPt)
     {
         if (_dragSrc is null) return;
+
+        var c = _dragSrc.Control;
+        if (c is not null && _cardsHost is not null)
+        {
+            var local = _cardsHost.PointToClient(screenPt);
+            c.BringToFront();                                  // 别被别的卡压住
+            c.Location = new Point(local.X - c.Width / 2, local.Y - c.Height / 2);
+        }
+
         var target = AdapterAtScreen(screenPt);
         foreach (var a in _plugins.Cards)
             a.Control?.SetDropHint(!ReferenceEquals(a, _dragSrc) && ReferenceEquals(a, target));
     }
 
-    /// <summary>松手：插到落点那张卡的位置。落在空白处就不动。</summary>
+    /// <summary>松手：插到落点那张卡的位置；落在空白/自己身上就复位。</summary>
     private void CardDragDropped(object? sender, EventArgs e)
     {
         var src = _dragSrc;
@@ -1227,10 +1253,12 @@ internal sealed class MainForm : Form, IPluginHost
         foreach (var a in _plugins.Cards) a.Control?.SetDropHint(false);
 
         if (src is null) return;
-        var target = AdapterAtScreen(Control.MousePosition);
-        if (target is null || ReferenceEquals(target, src)) return;
 
-        MoveCardBefore(src.PluginId, target.PluginId);
+        var target = AdapterAtScreen(Control.MousePosition);
+        if (target is not null && !ReferenceEquals(target, src))
+            MoveCardBefore(src.PluginId, target.PluginId);   // 内部会重排
+        else
+            RelayoutCards();                                  // 拖着走了一圈又放下：归位
     }
 
     /// <summary>屏幕坐标落在哪张卡上；不在任何卡上返回 null。</summary>
@@ -1569,6 +1597,21 @@ internal sealed class SettingsForm : Form
             });
         }
 
+        // ---- 卡片区布局 ----
+        NumericUpDown? numCols = null;
+        if (string.IsNullOrEmpty(onlyPluginId))
+        {
+            Section("卡片区布局");
+            numCols = new NumericUpDown
+            {
+                Minimum = 0,
+                Maximum = 6,
+                Value = Math.Clamp(_s.CardColumns, 0, 6),
+                Width = 80,
+            };
+            Row("每行几列", numCols, "0 = 自动：≤3 张单列、4–8 张两列、再多三列。功能变多以后嫌排太长就手动填");
+        }
+
         // ---- 插件设置（默认可见项）----
         // 顺序与卡片一致：按 order 从小到大。没有 always 项的插件不占位。
         foreach (var sec in _sections)
@@ -1806,11 +1849,12 @@ internal sealed class SettingsForm : Form
             _s.ClientPathHint = tbPath.Text.Trim();
             _s.PressStrength = tbStrength.Value;
 
-            // —— 功能开关（右键单插件进来时不动，避免只写了一半）——
+            // —— 功能开关 / 卡片列数（右键单插件进来时不动，避免只写了一半）——
             if (string.IsNullOrEmpty(onlyPluginId) && _sections.Count > 0)
             {
                 _s.DisabledPlugins = _draftDisabled.ToList();
             }
+            if (numCols is not null) _s.CardColumns = (int)numCols.Value;
 
             // —— 插件项：按绑定写回各自的 settings.json ——
             foreach (var (input, store, sc) in _bind)

@@ -110,6 +110,12 @@ internal sealed class Settings
     /// </summary>
     public List<string> DisabledPlugins { get; set; } = new();
 
+    /// <summary>
+    /// 卡片区显示几列。**0 = 自动**（按卡片数量算：≤3 张单列、4–8 张两列、更多三列）。
+    /// 功能多了以后两列会排得很长，允许手动改。
+    /// </summary>
+    public int CardColumns { get; set; } = 0;
+
     /// <summary>JSON 里允许 // 注释和尾随逗号 —— config.json 是给人看的，必须能写注释。</summary>
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -172,6 +178,7 @@ internal sealed class Settings
         ["CardOrder"] = "卡片显示顺序（插件 id 数组）。空 = 按插件自己的 order 排；没列到的插件自动排到末尾",
         ["CardHidden"] = "隐藏的卡片（插件 id 数组）。隐藏不等于禁用：插件照跑，只是不显示卡片",
         ["DisabledPlugins"] = "关掉的功能（插件 id 数组）。关掉 = 启动时完全不加载，需重启程序生效",
+        ["CardColumns"] = "卡片显示几列。0 = 自动（≤3 张单列 / 4-8 张两列 / 更多三列），也可以手动填 1-6",
     };
 
     /// <summary>
