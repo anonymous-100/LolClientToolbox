@@ -274,20 +274,25 @@ internal sealed class MainForm : Form, IPluginHost
             BackColor = Bg, Padding = new Padding(0),
         };
 
-        // 空格子的边框只能由容器画（有卡的格子由卡片自己描边）：
-        //   平时 —— 淡虚线框，让人知道「这儿还有个空位能放」；
-        //   拖动中停上去 —— 金色实线，表示「松手就放这儿」。
+        // 网格线**只在拖动时**出现（常态一片干净，不画任何框）：
+        //   拖动中 —— 每个格子描淡虚线，告诉你「能落在哪些位置」；
+        //   鼠标所在格 —— 金色实线，表示「松手就放这儿」。
+        // 有卡的格子由卡片自己盖住（并自己描金边），所以这里画了也只会露在空格上。
         _cardsHost.Paint += (_, e) =>
         {
-            if (_gridCols <= 0) return;
-            for (int i = 0; i < _grid.Count; i++)
-            {
-                if (_grid[i] is not null) continue;          // 有卡的格子不画
+            if (_dragSrc is null || _gridCols <= 0 || _grid.Count == 0) return;
 
-                bool active = i == _dropCell;
-                using var pen = new Pen(active ? T.Accent : T.BdSubtle, active ? 2f : 1f);
-                if (!active) pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
-                e.Graphics.DrawRectangle(pen, CellRect(i));
+            using (var dash = new Pen(T.BdSubtle, 1f) { DashStyle = System.Drawing.Drawing2D.DashStyle.Dash })
+                for (int i = 0; i < _grid.Count; i++)
+                {
+                    if (i == _dropCell) continue;        // 选中格单独画实线，避免两层叠在一起
+                    e.Graphics.DrawRectangle(dash, CellRect(i));
+                }
+
+            if (_dropCell >= 0 && _dropCell < _grid.Count)
+            {
+                using var solid = new Pen(T.Accent, 2f);
+                e.Graphics.DrawRectangle(solid, CellRect(_dropCell));
             }
         };
 
@@ -432,7 +437,7 @@ internal sealed class MainForm : Form, IPluginHost
                         // 测试专用：临时翻开开发者选项开关（仅内存，不落盘）——
                         // 否则按钮不可见，而 PerformClick 走 CanSelect，不可见时点了没反应
                         _settings.ShowDevOptions = true;
-                        dlg = new SettingsForm(_settings, _plugins.PluginSections());
+                        dlg = new SettingsForm(_settings, _plugins.PluginSections(), cardCount: _plugins.Cards.Count);
                         dlg.StartPosition = FormStartPosition.Manual;
                         dlg.Location = new Point(-3000, -3000);
                         dlg.ShowInTaskbar = false;
@@ -1026,7 +1031,7 @@ internal sealed class MainForm : Form, IPluginHost
 
     private void OpenSettings()
     {
-        using var dlg = new SettingsForm(_settings, _plugins.PluginSections());
+        using var dlg = new SettingsForm(_settings, _plugins.PluginSections(), cardCount: _plugins.Cards.Count);
         if (dlg.ShowDialog(this) == DialogResult.OK)
         {
             _lcu.ClientPathHint = _settings.ClientPathHint;
@@ -1157,13 +1162,16 @@ internal sealed class MainForm : Form, IPluginHost
         int innerW = Math.Max(320, _cardsHost.ClientSize.Width - pad * 2);
         int cardW = (innerW - CardGap * (cols - 1)) / cols;
 
-        // 行数：先保证「所有卡片都放得下」，空间富余就多给几格
+        // 行数：保证「所有卡片放得下」，然后**再多留一行空白**。
+        // 这一行是故意留的（用户要求）：卡片和日志之间隔一行，视觉上不挤，
+        // 顺带也是拖动时的落点区。空格平时不画边框（见下面的 Paint），
+        // 所以它看起来只是留白，不会出现一排虚线空框。
         int needRows = Math.Max(1, (_plugins.Cards.Count + cols - 1) / cols);
         int availH = _cardsHost.ClientSize.Height - T.Sp3;
         int fitRows = availH > 0 ? Math.Max(1, (availH + CardGap) / cellH) : needRows;
         int rows = _settings.CardRows > 0
-            ? Math.Max(needRows, Math.Clamp(_settings.CardRows, 1, 10))
-            : Math.Max(needRows, fitRows);
+            ? Math.Max(needRows + 1, Math.Clamp(_settings.CardRows, 1, 10))
+            : Math.Max(needRows + 1, fitRows);
 
         int cells = rows * cols;
         _grid = BuildGrid(cells);
@@ -1286,6 +1294,8 @@ internal sealed class MainForm : Form, IPluginHost
     {
         _dragSrc = sender as CardAdapter;
         if (_dragSrc is null) return;
+        _dropCell = -1;
+        _cardsHost?.Invalidate();      // 网格线只在拖动时出现，所以一开始就得重画
         SetStatus("拖到目标格子松手 —— 空格子也能放");
     }
 
@@ -1379,7 +1389,7 @@ internal sealed class MainForm : Form, IPluginHost
     {
         try
         {
-            using var dlg = new SettingsForm(_settings, _plugins.PluginSections(), pluginId);
+            using var dlg = new SettingsForm(_settings, _plugins.PluginSections(), pluginId, _plugins.Cards.Count);
             dlg.ShowDialog(this);
             ApplyPressStrength();
         }
@@ -1528,6 +1538,8 @@ internal sealed class SettingsForm : Form
 {
     private readonly Settings _s;
     private readonly List<PluginSettingsSection> _sections;
+    /// <summary>当前卡片数。用来算「自动」到底是几列几行 —— 设置窗里要把它显示出来。</summary>
+    private readonly int _cardCount;
     /// <summary>插件设置控件与存储的绑定，点保存时统一写回。</summary>
     private readonly List<(Control Input, IPluginSettings Store, SettingSchema Schema)> _bind = new();
     private Action? _toggleDev;   // 由构造函数末尾赋值，供快捷键调用
@@ -1535,9 +1547,11 @@ internal sealed class SettingsForm : Form
     // 功能管理的「草稿」：点保存才写回 _s，点取消就当没改过
     private HashSet<string> _draftDisabled = new(StringComparer.OrdinalIgnoreCase);
 
-    public SettingsForm(Settings s, List<PluginSettingsSection> sections, string? onlyPluginId = null)
+    public SettingsForm(Settings s, List<PluginSettingsSection> sections, string? onlyPluginId = null,
+                        int cardCount = 0)
     {
         _s = s;
+        _cardCount = cardCount;
         // 右键某张卡片进来的：只渲染这个插件的分区，别的都不显示
         _sections = string.IsNullOrEmpty(onlyPluginId)
             ? sections
@@ -1656,23 +1670,81 @@ internal sealed class SettingsForm : Form
         if (string.IsNullOrEmpty(onlyPluginId))
         {
             Section("卡片区布局");
+
+            // 「填 0 就是自动」这种约定太隐晦 —— 没人会主动去猜 0 的含义，
+            // 所以给一个明确的「自动」按钮；右边的灰字实时告诉你此刻到底是多少，
+            // 省得用户按完了还得回主界面数格子才知道发生了什么。
+            (Control Box, Label State) NumWithAuto(NumericUpDown num, Func<int> autoValue, string unit)
+            {
+                var box = new FlowLayoutPanel
+                {
+                    FlowDirection = FlowDirection.LeftToRight,
+                    WrapContents = false,
+                    AutoSize = true,
+                    AutoSizeMode = AutoSizeMode.GrowAndShrink,
+                    Margin = new Padding(0),
+                    BackColor = T.BgBase,
+                };
+                num.Width = 58;
+                num.Height = T.ControlH;
+                num.TextAlign = HorizontalAlignment.Center;
+
+                var btn = new Button
+                {
+                    Text = "自动",
+                    Width = 52, Height = T.ControlH,
+                    FlatStyle = FlatStyle.Flat,
+                    BackColor = T.BgOverlay, ForeColor = T.TxSecondary,
+                    Font = T.Meta(), Cursor = Cursors.Hand,
+                    Margin = new Padding(6, 0, 10, 0),
+                };
+                btn.FlatAppearance.BorderColor = T.BdStrong;
+
+                var state = new Label
+                {
+                    AutoSize = false, Width = 120, Height = T.ControlH,
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    ForeColor = T.TxTertiary, Font = T.Meta(),
+                    Margin = new Padding(0),
+                };
+
+                void Sync()
+                {
+                    bool auto = num.Value == 0;
+                    state.Text = auto ? $"自动 · {autoValue()} {unit}" : $"手动 · {(int)num.Value} {unit}";
+                    btn.ForeColor = auto ? T.Accent : T.TxSecondary;   // 当前就是自动时按钮变金
+                }
+
+                btn.Click += (_, _) => { num.Value = 0; Sync(); };
+                num.ValueChanged += (_, _) => Sync();
+
+                box.Controls.Add(num);
+                box.Controls.Add(btn);
+                box.Controls.Add(state);
+                Sync();
+                return (box, state);
+            }
+
+            // 自动列数的规则跟主界面同一套（ColumnsFor），这里只是把它显示出来
+            int AutoCols() => _cardCount <= 3 ? 1 : _cardCount <= 8 ? 2 : 3;
+            // 自动行数 = 放下所有卡片后再多留一行空白
+            int AutoRows() => Math.Max(2, (_cardCount + AutoCols() - 1) / AutoCols() + 1);
+
             numCols = new NumericUpDown
             {
-                Minimum = 0,
-                Maximum = 6,
+                Minimum = 0, Maximum = 6,
                 Value = Math.Clamp(_s.CardColumns, 0, 6),
-                Width = 80,
             };
-            Row("每行几列", numCols, "0 = 自动：≤3 张单列、4–8 张两列、再多三列。功能变多以后嫌排太长就手动填");
+            var colsBox = NumWithAuto(numCols, AutoCols, "列");
+            Row("每行几列", colsBox.Box, "自动：≤3 个功能单列、4–8 个两列、更多三列。也可以手动填 1–6");
 
             numRows = new NumericUpDown
             {
-                Minimum = 0,
-                Maximum = 10,
+                Minimum = 0, Maximum = 10,
                 Value = Math.Clamp(_s.CardRows, 0, 10),
-                Width = 80,
             };
-            Row("最多几行", numRows, "0 = 自动（最多 3 行），超出的滚动看。想多露点日志就把这个调小");
+            var rowsBox = NumWithAuto(numRows, AutoRows, "行");
+            Row("显示几行", rowsBox.Box, "自动 = 放下所有卡片后再留一行空白（看起来不挤）。手填可以改这一行的留白多少");
         }
 
         // ---- 插件设置（默认可见项）----

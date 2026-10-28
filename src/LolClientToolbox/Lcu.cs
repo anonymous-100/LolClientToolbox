@@ -112,8 +112,8 @@ internal sealed class Settings
     public int CardColumns { get; set; } = 0;
 
     /// <summary>
-    /// 卡片区最多显示几行。**0 = 自动（最多 3 行）**，超出的滚动查看。
-    /// 设小了卡片区就矮（露出更多日志），设大了就高。跟列数一起决定一屏能放几张。
+    /// 卡片区显示几行。**0 = 自动 = 放下所有卡片后再留一行空白**。
+    /// 那一行留白是故意的：卡片和日志之间不挤，也是拖动卡片的落点区。
     /// </summary>
     public int CardRows { get; set; } = 0;
 
@@ -178,7 +178,7 @@ internal sealed class Settings
         ["CardOrder"] = "卡片显示顺序（插件 id 数组）。空 = 按插件自己的 order 排；没列到的插件自动排到末尾",
         ["DisabledPlugins"] = "关掉的功能（插件 id 数组）。关掉 = 启动时完全不加载，需重启程序生效",
         ["CardColumns"] = "卡片显示几列。0 = 自动（≤3 张单列 / 4-8 张两列 / 更多三列），也可以手动填 1-6",
-        ["CardRows"] = "卡片区最多显示几行。0 = 自动（最多 3 行），超出的滚动看",
+        ["CardRows"] = "卡片区显示几行。0 = 自动（放下所有卡片后再留一行空白，视觉上不挤）",
     };
 
     /// <summary>
