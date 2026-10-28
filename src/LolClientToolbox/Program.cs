@@ -241,7 +241,9 @@ internal sealed class MainForm : Form, IPluginHost
         //  日志只要留够看最近几条就行。）
         var logPanel = new Panel
         {
-            Dock = DockStyle.Bottom, Height = 26 + T.LogRowH * 4,
+            // Fill：吃掉卡片区剩下的高度。卡片区高度由网格算出来（含那一行留白），
+            // 所以卡片和日志是紧挨着的，中间不会空出一块背景色（2026-10-28 用户要求）。
+            Dock = DockStyle.Fill,
             BackColor = Bg, Padding = new Padding(T.PadOuter, 0, T.PadOuter, 0),
         };
         var logHead = new Panel { Dock = DockStyle.Top, Height = 26, BackColor = Bg };
@@ -261,15 +263,15 @@ internal sealed class MainForm : Form, IPluginHost
         logPanel.Controls.Add(_log);
         logPanel.Controls.Add(logHead);
 
-        // ---------- 卡片区：两列网格，超出高度就滑动 ----------
-        // 卡片由各插件在 Init 里 RegisterCard 注册。显示顺序与显隐由 config.json 的
-        // CardOrder / CardHidden 决定（设置窗「卡片管理」可改），没配就按 plugin.json 的 order。
-        // 卡片区占满剩余空间（Fill），**不开滚动条**：
-        // 空间富余出来的部分就是「空格子」，拖动时可以直接把卡片丢进去 —— 这正是用户要的网格。
-        // 一旦开 AutoScroll，格子就藏到滚动条后面了，拖动还得先滚，体验反而差。
+        // ---------- 卡片区：网格布局 ----------
+        // 卡片由各插件在 Init 里 RegisterCard 注册，顺序由 config.json 的 CardOrder 决定。
+        // 高度**按网格算**（行数 × 卡高 + 上下留白），不是 Fill ——
+        // Fill 的话卡片区会把窗口撑满，卡片底下就多出一大片背景色，
+        // 看起来像「卡片和日志之间空了一大块」（2026-10-28 用户反馈）。
+        // 高度由 RelayoutCards 按行数设置；AutoScroll 关闭：一屏就那几行，不需要滚。
         _cardsHost = new Panel
         {
-            Dock = DockStyle.Fill,
+            Dock = DockStyle.Top,
             AutoScroll = false,
             BackColor = Bg, Padding = new Padding(0),
         };
@@ -371,8 +373,10 @@ internal sealed class MainForm : Form, IPluginHost
         // Dock 从集合末尾往回停靠：标题栏最后 Add 才会贴在最顶上
         // 注意顺序：Dock 是按「后加的先占位」处理的，所以 Fill 的卡片区必须**最先添加**，
         // 才能最后处理、拿到前面所有 Top/Bottom 分完之后的剩余空间。
-        Controls.Add(_cardsHost);
+        // Dock 的排版顺序是「后加的控件先占位」，所以 Fill 的日志区要先加、
+        // 最后才轮到它吃剩余空间；卡片区是 Top，加在后面就能紧贴标题栏。
         Controls.Add(logPanel);
+        Controls.Add(_cardsHost);
         Controls.Add(_statusPanel);
         Controls.Add(footer);
         Controls.Add(_titleBar);
@@ -1162,16 +1166,20 @@ internal sealed class MainForm : Form, IPluginHost
         int innerW = Math.Max(320, _cardsHost.ClientSize.Width - pad * 2);
         int cardW = (innerW - CardGap * (cols - 1)) / cols;
 
-        // 行数：保证「所有卡片放得下」，然后**再多留一行空白**。
-        // 这一行是故意留的（用户要求）：卡片和日志之间隔一行，视觉上不挤，
-        // 顺带也是拖动时的落点区。空格平时不画边框（见下面的 Paint），
-        // 所以它看起来只是留白，不会出现一排虚线空框。
-        int needRows = Math.Max(1, (_plugins.Cards.Count + cols - 1) / cols);
-        int availH = _cardsHost.ClientSize.Height - T.Sp3;
-        int fitRows = availH > 0 ? Math.Max(1, (availH + CardGap) / cellH) : needRows;
+        // 行数（自动）＝ 放下所有卡片所需行数，**如果最后一行正好铺满，就再补一行空格**。
+        // 例：3 列时 6 张 = 2 行铺满 → 用 3 行（多出的 3 格是留白，也是拖动落点）；
+        //     7 张 = 3 行、最后一行本来就有空位 → 仍用 3 行，不再额外补。
+        // 只看卡片数决定，跟窗口高度无关 —— 所以窗口拉大拉小，留白始终是「最多一行」。
+        int count = _plugins.Cards.Count;
+        int needRows = Math.Max(1, (count + cols - 1) / cols);
+        int autoRows = needRows + (count > 0 && count % cols == 0 ? 1 : 0);
         int rows = _settings.CardRows > 0
-            ? Math.Max(needRows + 1, Math.Clamp(_settings.CardRows, 1, 10))
-            : Math.Max(needRows + 1, fitRows);
+            ? Math.Max(needRows, Math.Clamp(_settings.CardRows, 1, 10))
+            : autoRows;
+
+        // 卡片区高度按网格算：上留白 + 行数 × 卡高 + 行距 + 下留白。
+        // 不撑满窗口 —— 那样卡片下面的富余空间会变成一大片背景色。
+        _cardsHost.Height = T.Sp3 + rows * cellH - CardGap + T.Sp3;
 
         int cells = rows * cols;
         _grid = BuildGrid(cells);
@@ -1727,8 +1735,14 @@ internal sealed class SettingsForm : Form
 
             // 自动列数的规则跟主界面同一套（ColumnsFor），这里只是把它显示出来
             int AutoCols() => _cardCount <= 3 ? 1 : _cardCount <= 8 ? 2 : 3;
-            // 自动行数 = 放下所有卡片后再多留一行空白
-            int AutoRows() => Math.Max(2, (_cardCount + AutoCols() - 1) / AutoCols() + 1);
+            // 自动行数：刚好铺满时补一行空格（留白 + 拖动落点），没铺满就不补。
+            // 例：3 列 6 张 → 3 行；3 列 7 张 → 3 行
+            int AutoRows()
+            {
+                int c = AutoCols();
+                int need = Math.Max(1, (_cardCount + c - 1) / c);
+                return need + (_cardCount > 0 && _cardCount % c == 0 ? 1 : 0);
+            }
 
             numCols = new NumericUpDown
             {
@@ -1744,7 +1758,7 @@ internal sealed class SettingsForm : Form
                 Value = Math.Clamp(_s.CardRows, 0, 10),
             };
             var rowsBox = NumWithAuto(numRows, AutoRows, "行");
-            Row("显示几行", rowsBox.Box, "自动 = 放下所有卡片后再留一行空白（看起来不挤）。手填可以改这一行的留白多少");
+            Row("显示几行", rowsBox.Box, "自动 = 放下所有卡片；如果最后一行正好铺满，就再补一行空着（留白，也方便拖过去调位置）");
         }
 
         // ---- 插件设置（默认可见项）----
