@@ -107,13 +107,24 @@ internal sealed class MainForm : Form, IPluginHost
     private string _lastPhase = "";
     private ClientSnapshot? _lastCs;
 
-    /// <summary>卡片容器。改顺序/显隐后要原地重排，所以留成字段。</summary>
+    /// <summary>卡片容器（Dock.Fill 占满剩余空间，网格的格子铺在里面）。</summary>
     private Panel? _cardsHost;
-    private const int CardCols = 2;
     private const int CardGap = 8;
 
-    /// <summary>正在被长按拖动的那张卡（安卓桌面式排序）。</summary>
+    /// <summary>正在被长按拖动的那张卡。</summary>
     private CardAdapter? _dragSrc;
+
+    // —— 当前网格：拖动落点判定全靠这几个 ——
+    /// <summary>索引＝格子序号，null＝空格。</summary>
+    private List<CardAdapter?> _grid = new();
+    private int _gridCols;
+    private int _gridCells;
+    private int _gridCardW;
+    /// <summary>拖动中鼠标悬停的格子序号（-1 = 没落在格子上）。</summary>
+    private int _dropCell = -1;
+
+    /// <summary>窗口尺寸变化后重算网格的防抖（拖窗口时别狂算）。</summary>
+    private readonly System.Windows.Forms.Timer _relayoutDebounce = new() { Interval = 80 };
 
     private static readonly string AppDirectory =
         Path.GetDirectoryName(Environment.ProcessPath ?? Application.ExecutablePath) ?? AppContext.BaseDirectory;
@@ -225,12 +236,12 @@ internal sealed class MainForm : Form, IPluginHost
         // ---------- 运行日志：固定 4 行 ----------
         // 只在「有东西变了」时记一行，并标出上一阶段停留多久。
         //
-        // 高度用 Fill 吃剩余：以前是「固定 5 行贴底」，卡片区一变小（比如改列数）
-        // 两者之间就空出一大块（2026-10-28 用户反馈）。Fill 之后卡片少时日志自动变高，
-        // 一点空间不浪费，也不用再猜日志该占几行。
+        // 高度固定 4 行贴底：日志是「看一眼最近几条」的东西，不该跟卡片抢空间。
+        // （2026-10-28 用户：日志区这么大不行，让卡片区占空位 —— 卡片区改成 Fill 之后，
+        //  日志只要留够看最近几条就行。）
         var logPanel = new Panel
         {
-            Dock = DockStyle.Fill,
+            Dock = DockStyle.Bottom, Height = 26 + T.LogRowH * 4,
             BackColor = Bg, Padding = new Padding(T.PadOuter, 0, T.PadOuter, 0),
         };
         var logHead = new Panel { Dock = DockStyle.Top, Height = 26, BackColor = Bg };
@@ -253,11 +264,37 @@ internal sealed class MainForm : Form, IPluginHost
         // ---------- 卡片区：两列网格，超出高度就滑动 ----------
         // 卡片由各插件在 Init 里 RegisterCard 注册。显示顺序与显隐由 config.json 的
         // CardOrder / CardHidden 决定（设置窗「卡片管理」可改），没配就按 plugin.json 的 order。
+        // 卡片区占满剩余空间（Fill），**不开滚动条**：
+        // 空间富余出来的部分就是「空格子」，拖动时可以直接把卡片丢进去 —— 这正是用户要的网格。
+        // 一旦开 AutoScroll，格子就藏到滚动条后面了，拖动还得先滚，体验反而差。
         _cardsHost = new Panel
         {
-            Dock = DockStyle.Top, AutoScroll = true,
+            Dock = DockStyle.Fill,
+            AutoScroll = false,
             BackColor = Bg, Padding = new Padding(0),
         };
+
+        // 空格子的边框只能由容器画（有卡的格子由卡片自己描边）：
+        //   平时 —— 淡虚线框，让人知道「这儿还有个空位能放」；
+        //   拖动中停上去 —— 金色实线，表示「松手就放这儿」。
+        _cardsHost.Paint += (_, e) =>
+        {
+            if (_gridCols <= 0) return;
+            for (int i = 0; i < _grid.Count; i++)
+            {
+                if (_grid[i] is not null) continue;          // 有卡的格子不画
+
+                bool active = i == _dropCell;
+                using var pen = new Pen(active ? T.Accent : T.BdSubtle, active ? 2f : 1f);
+                if (!active) pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
+                e.Graphics.DrawRectangle(pen, CellRect(i));
+            }
+        };
+
+        // 窗口大小变了 → 能塞几行会变 → 网格得重算。
+        // 80ms 防抖：拖窗口边框时尺寸事件很密，每次都重排会卡。
+        _relayoutDebounce.Tick += (_, _) => { _relayoutDebounce.Stop(); RelayoutCards(); };
+        _cardsHost.SizeChanged += (_, _) => { _relayoutDebounce.Stop(); _relayoutDebounce.Start(); };
 
         // 加载插件（Init 里会 RegisterCard，所以必须晚于 _log 创建）。
         // 先把程序目录写进日志：仓库里可能同时存在 .dev / .dev-new / dist 好几份构建，
@@ -327,8 +364,10 @@ internal sealed class MainForm : Form, IPluginHost
         };
 
         // Dock 从集合末尾往回停靠：标题栏最后 Add 才会贴在最顶上
-        Controls.Add(logPanel);
+        // 注意顺序：Dock 是按「后加的先占位」处理的，所以 Fill 的卡片区必须**最先添加**，
+        // 才能最后处理、拿到前面所有 Top/Bottom 分完之后的剩余空间。
         Controls.Add(_cardsHost);
+        Controls.Add(logPanel);
         Controls.Add(_statusPanel);
         Controls.Add(footer);
         Controls.Add(_titleBar);
@@ -1080,35 +1119,10 @@ internal sealed class MainForm : Form, IPluginHost
         var menu = new ContextMenuStrip { Font = T.Body() };
         menu.Items.Add("查看功能说明", null, (_, _) => ShowPluginHelp(card.PluginId, card.PluginName));
         menu.Items.Add("打开此功能设置…", null, (_, _) => OpenSettingsForPlugin(card.PluginId));
-        menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("上移", null, (_, _) => MoveCard(card.PluginId, -1));
-        menu.Items.Add("下移", null, (_, _) => MoveCard(card.PluginId, +1));
+        // 顺序靠长按拖动调整，这里不再放「上移/下移」——两套入口只会让人纠结用哪个
         return menu;
     }
 
-    /// <summary>
-    /// 按 config.json 的 CardOrder / CardHidden 算出「该显示哪些卡片、按什么顺序」。
-    ///
-    /// 四条容错，缺一条就会出现「装个新插件顺序全乱」这类问题：
-    ///   ① 按 CardOrder 里出现的先后排；
-    ///   ② CardOrder 里没出现的（新装的插件）按自己的 order 追加到末尾；
-    ///   ③ CardOrder 里有、但当前没加载的 id 直接忽略（插件被删或禁用是正常情况）；
-    ///   ④ CardOrder 为空 → 完全按 plugin.json 的 order，跟以前一样。
-    /// </summary>
-    private List<CardAdapter> ApplyCardLayout(IReadOnlyList<CardAdapter> cards)
-    {
-        var hidden = new HashSet<string>(_settings.CardHidden, StringComparer.OrdinalIgnoreCase);
-
-        var rank = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        for (int i = 0; i < _settings.CardOrder.Count; i++)
-            rank[_settings.CardOrder[i]] = i;
-
-        return cards
-            .Where(c => !hidden.Contains(c.PluginId))
-            .OrderBy(c => rank.TryGetValue(c.PluginId, out int r) ? r : int.MaxValue)
-            .ThenBy(c => c.Order)
-            .ToList();
-    }
 
     /// <summary>
     /// 本次该用几列：设置里填了就用填的（1–6）；填 0 按卡片数自动算。
@@ -1126,50 +1140,58 @@ internal sealed class MainForm : Form, IPluginHost
     /// 按当前配置重排卡片区。首次布局、拖动排序、设置窗改显隐，都走这里。
     /// 先摘掉所有卡片控件再按新顺序放回去，所以被关掉的功能自然就消失了。
     /// </summary>
+    /// <summary>
+    /// 按「网格」摆放卡片。
+    ///
+    /// 和以前最大的不同：**格子是固定的，卡片可以落在任意格子，空着的格子就空着**。
+    /// 这样拖动卡片可以直接丢进空格（「移动到指定网格」），不用滚动去找位置。
+    /// 行数优先保证所有卡片放得下，空间富余就多给几格 —— 多出来的就是空格。
+    /// </summary>
     private void RelayoutCards()
     {
         if (_cardsHost is null) return;
 
-        var ordered = ApplyCardLayout(_plugins.Cards);
-        int cols = ColumnsFor(ordered.Count);
-        int rows = (ordered.Count + cols - 1) / cols;
-        bool allHidden = ordered.Count == 0;
-
-        // 卡片区高度 = 「实际行数」和「最多显示几行」取小，超出的靠 AutoScroll 滚
-        int maxRows = _settings.CardRows > 0 ? Math.Clamp(_settings.CardRows, 1, 10) : 3;
-        int shownRows = Math.Max(1, Math.Min(rows, maxRows));
-        int shownH = shownRows * T.CardH + (shownRows - 1) * CardGap;
-        bool needScroll = rows > shownRows;
-
-        // 要滚动时给竖滚动条留位置，否则最右一列被条子压掉一截
-        int innerW = Math.Max(320, ClientSize.Width - T.PadOuter * 2
-                                   - (needScroll ? SystemInformation.VerticalScrollBarWidth : 0));
+        int cols = ColumnsFor(_plugins.Cards.Count);
+        int pad = T.PadOuter;
+        int cellH = T.CardH + CardGap;
+        int innerW = Math.Max(320, _cardsHost.ClientSize.Width - pad * 2);
         int cardW = (innerW - CardGap * (cols - 1)) / cols;
+
+        // 行数：先保证「所有卡片都放得下」，空间富余就多给几格
+        int needRows = Math.Max(1, (_plugins.Cards.Count + cols - 1) / cols);
+        int availH = _cardsHost.ClientSize.Height - T.Sp3;
+        int fitRows = availH > 0 ? Math.Max(1, (availH + CardGap) / cellH) : needRows;
+        int rows = _settings.CardRows > 0
+            ? Math.Max(needRows, Math.Clamp(_settings.CardRows, 1, 10))
+            : Math.Max(needRows, fitRows);
+
+        int cells = rows * cols;
+        _grid = BuildGrid(cells);
+        _gridCols = cols;
+        _gridCardW = cardW;
+        _gridCells = cells;
 
         _cardsHost.SuspendLayout();
         try
         {
-            // 先清场：所有卡片控件都摘下来
             foreach (var a in _plugins.Cards)
-            {
                 if (a.Control.Parent == _cardsHost) _cardsHost.Controls.Remove(a.Control);
-            }
-            // 「全部隐藏」的提示也清掉，防止反复重排时叠出一堆
             foreach (var leftover in _cardsHost.Controls.OfType<Label>().ToList())
                 _cardsHost.Controls.Remove(leftover);
 
-            for (int i = 0; i < ordered.Count; i++)
+            for (int i = 0; i < cells; i++)
             {
-                var a = ordered[i];
+                var a = _grid[i];
+                if (a is null) continue;      // 空格子：什么都不放，等着被拖进来
                 var c = a.Control;
                 c.Dock = DockStyle.None;
                 c.Margin = new Padding(0);
                 c.Size = new Size(cardW, T.CardH);
-                c.Location = new Point(T.PadOuter + (i % cols) * (cardW + CardGap),
-                                       T.Sp3 + (i / cols) * (T.CardH + CardGap));
+                c.Location = new Point(pad + (i % cols) * (cardW + CardGap),
+                                       T.Sp3 + (i / cols) * cellH);
                 c.ContextMenuStrip = BuildCardMenu(a);
 
-                // 长按拖动排序：先解绑再绑，避免每次重排累积一堆处理器
+                // 长按拖动：先解绑再绑，避免每次重排累积一堆处理器
                 a.DragStarted -= CardDragStarted;
                 a.DragStarted += CardDragStarted;
                 a.DragMoved -= CardDragMoved;
@@ -1180,126 +1202,151 @@ internal sealed class MainForm : Form, IPluginHost
                 _cardsHost.Controls.Add(c);
             }
 
-            // 全部隐藏时别让人对着一片空白发呆
-            if (allHidden)
+            if (_plugins.Cards.Count == 0)
             {
                 _cardsHost.Controls.Add(new Label
                 {
-                    Text = "所有卡片已隐藏 —— 打开「设置 → 卡片管理」把它们请回来",
+                    Text = "所有功能都关掉了 —— 打开「设置 → 功能」把它们打开（需重启）",
                     AutoSize = false,
-                    Location = new Point(T.PadOuter, T.Sp3),
+                    Location = new Point(pad, T.Sp3),
                     Size = new Size(innerW, 24),
                     ForeColor = TextDim,
                     Font = T.Meta(),
                 });
             }
-
-            _cardsHost.Height = allHidden
-                ? T.Sp3 * 2 + 26                                    // 留一行放提示
-                : shownH + T.Sp3 * 2;
         }
         finally
         {
             _cardsHost.ResumeLayout();
         }
+
+        _cardsHost.Invalidate();   // 空格的落点框由容器自己画
     }
 
     /// <summary>
-    /// 把某张卡片往前/后挪一位：写进 CardOrder 并立即重排。
-    ///
-    /// 第一次移动时会先把「当前实际顺序」整体写进 CardOrder ——
-    /// 否则配置原本是空表，只写一个 id 会让其余卡片按 order 重排，用户看到的顺序会跳。
+    /// 把 CardOrder 摊开成长度为 cells 的格子数组（元素 null = 空格）。
+    /// 规则：按 CardOrder 的格子索引就位 → 跳过空格/已卸载的插件/重复 id →
+    /// 剩下没放进去的（新装的）按 order 找第一个空格塞进去。
     /// </summary>
-    private void MoveCard(string pluginId, int delta)
+    private List<CardAdapter?> BuildGrid(int cells)
     {
-        var cur = ApplyCardLayout(_plugins.Cards).Select(c => c.PluginId).ToList();
-        int i = cur.IndexOf(pluginId);
-        int j = i + delta;
-        if (i < 0 || j < 0 || j >= cur.Count) return;   // 已经在头/尾，不动
+        var byId = new Dictionary<string, CardAdapter>(StringComparer.OrdinalIgnoreCase);
+        foreach (var c in _plugins.Cards) byId[c.PluginId] = c;
 
-        (cur[i], cur[j]) = (cur[j], cur[i]);
-        _settings.CardOrder = cur;
-        _settings.Save(AppDirectory);
-        RelayoutCards();
+        var grid = new List<CardAdapter?>(new CardAdapter?[cells]);
+        var placed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        for (int i = 0; i < cells && i < _settings.CardOrder.Count; i++)
+        {
+            var id = _settings.CardOrder[i];
+            if (string.IsNullOrEmpty(id)) continue;                // 空格
+            if (!byId.TryGetValue(id, out var card)) continue;     // 插件没装 / 被关掉
+            if (!placed.Add(id)) continue;                         // 同一个 id 出现两次
+            grid[i] = card;
+        }
+
+        foreach (var c in _plugins.Cards.OrderBy(x => x.Order))
+        {
+            if (placed.Contains(c.PluginId)) continue;
+            int free = grid.FindIndex(x => x is null);
+            if (free < 0) break;                                   // 没格子了（卡片比格子多）
+            grid[free] = c;
+            placed.Add(c.PluginId);
+        }
+        return grid;
     }
 
-    // ---------- 长按拖动排序（安卓桌面那套） ----------
+    /// <summary>屏幕坐标 → 格子序号；不在网格范围内返回 -1。</summary>
+    private int CellAtScreen(Point screenPt)
+    {
+        if (_cardsHost is null || _gridCols <= 0 || _gridCardW <= 0) return -1;
 
-    /// <summary>长按到位：记下拖的是哪张卡。</summary>
+        var local = _cardsHost.PointToClient(screenPt);
+        int relX = local.X - T.PadOuter;
+        int relY = local.Y - T.Sp3;
+        if (relX < 0 || relY < 0) return -1;
+
+        int col = relX / (_gridCardW + CardGap);
+        int row = relY / (T.CardH + CardGap);
+        if (col < 0 || col >= _gridCols) return -1;
+
+        int idx = row * _gridCols + col;
+        return idx < _gridCells ? idx : -1;
+    }
+
+    /// <summary>第 i 格在容器里的矩形（画空格落点框用）。</summary>
+    private Rectangle CellRect(int i) =>
+        new(T.PadOuter + (i % _gridCols) * (_gridCardW + CardGap),
+            T.Sp3 + (i / _gridCols) * (T.CardH + CardGap),
+            _gridCardW, T.CardH);
+
+    // ---------- 长按拖动：把卡片放到某个格子里 ----------
+
     private void CardDragStarted(object? sender, EventArgs e)
     {
         _dragSrc = sender as CardAdapter;
         if (_dragSrc is null) return;
-        SetStatus("松手放到目标位置即可调整顺序");
+        SetStatus("拖到目标格子松手 —— 空格子也能放");
     }
 
     /// <summary>
-    /// 拖动中：只把鼠标底下那张卡标成落点，**卡片本身不动**。
-    ///
-    /// 为什么不做「卡片跟随鼠标」的预览：那要为一张卡每帧改坐标 + 重绘，
-    /// 还会盖住落点、拖出边界被裁。这个程序一屏就六七张卡，交换语义配一个
-    /// 清晰的落点高亮已经完全够用，渲染开销接近零（只重画描边）。
+    /// 拖动中：算出鼠标悬在哪一格，标出来。
+    /// 那一格有卡片 → 让卡片描边；那一格是空的 → 由容器画一个虚线框（卡片画不出自己不存在的地方）。
     /// </summary>
     private void CardDragMoved(object? sender, Point screenPt)
     {
         if (_dragSrc is null) return;
-        var target = AdapterAtScreen(screenPt, exclude: _dragSrc);
+
+        int cell = CellAtScreen(screenPt);
+        if (cell == _dropCell) return;      // 没换格子就别重绘
+        _dropCell = cell;
+
+        var occupied = cell >= 0 && cell < _grid.Count ? _grid[cell] : null;
         foreach (var a in _plugins.Cards)
-            a.Control?.SetDropHint(!ReferenceEquals(a, _dragSrc) && ReferenceEquals(a, target));
+            a.Control?.SetDropHint(!ReferenceEquals(a, _dragSrc) && ReferenceEquals(a, occupied));
+
+        _cardsHost?.Invalidate();
     }
 
-    /// <summary>松手：插到落点那张卡的位置；落在空白/自己身上就复位。</summary>
+    /// <summary>松手：落到那一格。目标格有卡就换位，空格就直接搬过去。</summary>
     private void CardDragDropped(object? sender, EventArgs e)
     {
         var src = _dragSrc;
+        int cell = _dropCell;
         _dragSrc = null;
+        _dropCell = -1;
+
         foreach (var a in _plugins.Cards) a.Control?.SetDropHint(false);
+        _cardsHost?.Invalidate();
 
         if (src is null) return;
+        if (cell < 0) { SetStatus("松手位置不在格子上，位置未变"); return; }
 
-        // ⚠ 必须排除「正在被拖的那张卡」：
-        //   预览是把这张卡挪到鼠标底下，所以松手时鼠标 100% 还在它自己身上，
-        //   不排除的话落点永远等于自己 → 永远走「归位」分支 → 拖了等于没拖。
-        var target = AdapterAtScreen(Control.MousePosition, exclude: src);
-        if (target is not null)
-            SwapCards(src.PluginId, target.PluginId);         // 内部会重排
-        else
-            SetStatus("落在空白处，顺序未变");
-    }
-
-    /// <summary>屏幕坐标落在哪张卡上；不在任何卡上返回 null。exclude 用于跳过被拖的那张。</summary>
-    private CardAdapter? AdapterAtScreen(Point screenPt, CardAdapter? exclude = null)
-    {
-        foreach (var a in _plugins.Cards)
-        {
-            if (ReferenceEquals(a, exclude)) continue;
-            var c = a.Control;
-            if (c is null || c.IsDisposed || !c.Visible) continue;
-            if (c.RectangleToScreen(c.ClientRectangle).Contains(screenPt)) return a;
-        }
-        return null;
+        MoveCardToCell(src.PluginId, cell);
     }
 
     /// <summary>
-    /// 拖动放手：把 src 和 target **互换位置**（不是插入）。
-    ///
-    /// 用户明确要「其他卡片别动」—— 插入会让后面所有卡片顺移一格，一屏都在跳；
-    /// 交换只动这两张，其余纹丝不动，符合「只改被拖动那张的位置」。
+    /// 把卡片挪到第 cell 格。
+    /// 目标格有卡 → 跟它换（直接覆盖会把那张卡弄丢）；
+    /// 目标格是空的 → 卡片搬过去，原格留空（这才是「移动到指定格子」）。
     /// </summary>
-    private void SwapCards(string srcId, string targetId)
+    private void MoveCardToCell(string srcId, int cell)
     {
-        var cur = ApplyCardLayout(_plugins.Cards).Select(c => c.PluginId).ToList();
-        int i = cur.IndexOf(srcId);
-        int j = cur.IndexOf(targetId);
-        if (i < 0 || j < 0 || i == j) return;
+        if (cell < 0 || cell >= _grid.Count) return;
 
-        (cur[i], cur[j]) = (cur[j], cur[i]);
-        _settings.CardOrder = cur;
+        var ids = _grid.Select(c => c?.PluginId ?? "").ToList();   // "" = 空格
+        int from = ids.IndexOf(srcId);
+        if (from < 0 || from == cell) return;
+
+        string displaced = ids[cell];
+        ids[cell] = srcId;
+        ids[from] = displaced;      // 空格就搬走，有卡就换位
+
+        _settings.CardOrder = ids;
         _settings.Save(AppDirectory);
         RelayoutCards();
-        SetStatus("✓ 顺序已保存");
+        SetStatus("✓ 位置已保存");
     }
-
     /// <summary>
     /// 显示插件的说明文件。约定放在 plugins/&lt;id&gt;/说明.md，
     /// 找不到就显示一段提示，不弹错误框（缺说明是内容问题，不是故障）。
